@@ -356,3 +356,84 @@ fn test_json_output_validity() {
     assert_eq!(parsed2["mode"], "repair");
     assert_eq!(parsed2["summary"]["repaired"], 1);
 }
+
+#[test]
+fn test_extracted_fantome_folder_inspection_and_repair() {
+    let temp = TempDir::new().unwrap();
+    let mod_dir = temp.path().join("Tank-1.0.0-not-fixed");
+    let meta_dir = mod_dir.join("META");
+    let wad_dir = mod_dir.join("WAD");
+    fs_err::create_dir_all(&meta_dir).unwrap();
+    fs_err::create_dir_all(&wad_dir).unwrap();
+
+    let info_content = r#"{
+  "Name": "Tank Volibear",
+  "Author": "Frog",
+  "Version": "1.0.0",
+  "Description": "Test mod"
+}"#;
+    fs_err::write(meta_dir.join("info.json"), info_content).unwrap();
+
+    // Stale BIN in WAD
+    let stale_data = ltk_manager_assets::test_util::build_packed_wad(&[(
+        "data/characters/volibear/skins/skin0.bin",
+        &ltk_manager_assets::test_util::bin_bytes(&stale_bin()),
+    )]);
+    fs_err::write(wad_dir.join("Volibear.wad.client"), stale_data).unwrap();
+
+    // Check detection
+    assert_eq!(ModFormat::detect(&mod_dir), ModFormat::FantomeFolder);
+
+    let config = dummy_config();
+
+    // Health check on the extracted folder
+    let report = check_mod_health(&mod_dir, &config).unwrap();
+    assert_eq!(report.format, ModFormat::FantomeFolder);
+    assert_eq!(report.status, ModHealthStatus::Repairable);
+    assert!(report.repairable_count > 0);
+
+    // Repair in-place
+    let result = repair_mod_archive(&mod_dir, None, &config, false, false).unwrap();
+    assert!(result.is_repaired());
+
+    // Verify folder was repaired in-place
+    assert!(meta_dir.join("info.json").exists());
+    assert!(wad_dir.join("Volibear.wad.client").exists());
+
+    // Health check on repaired folder must now be healthy!
+    let post_report = check_mod_health(&mod_dir, &config).unwrap();
+    assert_eq!(post_report.status, ModHealthStatus::Healthy);
+    assert_eq!(post_report.format, ModFormat::FantomeFolder);
+}
+
+#[test]
+fn test_scan_directory_with_extracted_fantome_folders() {
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path().join("skins");
+    let skin_id_dir = skins_dir.join("34000");
+    let mod_folder = skin_id_dir.join("Emilia_Anivia-1.0.0");
+    fs_err::create_dir_all(mod_folder.join("META")).unwrap();
+    fs_err::create_dir_all(mod_folder.join("WAD")).unwrap();
+    fs_err::write(mod_folder.join("META").join("info.json"), b"{}").unwrap();
+    fs_err::write(mod_folder.join("WAD").join("Anivia.wad.client"), b"test").unwrap();
+
+    // Add another loose fantome archive in skins
+    let loose_fantome = skins_dir.join("LooseSkin.fantome");
+    make_packed_bin_fantome_zip(
+        &loose_fantome,
+        "LooseSkin",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+
+    // Scan skin_id_dir (non-recursive)
+    let found_in_id = scan_directory(&skin_id_dir, false).unwrap();
+    assert_eq!(found_in_id.len(), 1);
+    assert_eq!(found_in_id[0], mod_folder);
+
+    // Scan skins_dir (recursive)
+    let found_in_skins = scan_directory(&skins_dir, true).unwrap();
+    assert_eq!(found_in_skins.len(), 2);
+    assert!(found_in_skins.contains(&mod_folder));
+    assert!(found_in_skins.contains(&loose_fantome));
+}

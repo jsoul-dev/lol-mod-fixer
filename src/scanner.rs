@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::error::FixerResult;
-use crate::formats::ModFormat;
+use crate::formats::{ModFormat, is_fantome_folder};
 
 /// Resolve the default directory to scan.
 ///
@@ -56,28 +56,38 @@ pub fn is_candidate_file(path: &Path) -> bool {
     format != ModFormat::Unsupported
 }
 
-/// Scan a directory for mod archives.
+/// Scan a directory for mod archives and extracted Fantome mod folders.
 pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> {
     let mut candidates = Vec::new();
 
     if recursive {
-        for entry in WalkDir::new(dir)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
+        let mut it = WalkDir::new(dir).follow_links(false).into_iter();
+        while let Some(entry_res) = it.next() {
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(e) => {
+                    tracing::warn!("Skipping unreadable entry in {}: {e}", dir.display());
+                    continue;
+                }
+            };
             let path = entry.path();
-            if is_candidate_file(path) {
+            if path == dir {
+                continue;
+            }
+            if path.is_dir() && is_fantome_folder(path) {
+                candidates.push(path.to_path_buf());
+                it.skip_current_dir(); // Don't descend into META/WAD of this mod!
+            } else if path.is_file() && is_candidate_file(path) {
                 candidates.push(path.to_path_buf());
             }
         }
-    } else {
-        if let Ok(read_dir) = fs_err::read_dir(dir) {
-            for entry in read_dir.filter_map(Result::ok) {
-                let path = entry.path();
-                if is_candidate_file(&path) {
-                    candidates.push(path);
-                }
+    } else if let Ok(read_dir) = fs_err::read_dir(dir) {
+        for entry in read_dir.filter_map(Result::ok) {
+            let path = entry.path();
+            if (path.is_dir() && is_fantome_folder(&path))
+                || (path.is_file() && is_candidate_file(&path))
+            {
+                candidates.push(path);
             }
         }
     }

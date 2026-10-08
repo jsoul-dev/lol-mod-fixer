@@ -15,7 +15,7 @@ use tempfile::TempDir;
 use crate::error::{FixerError, FixerResult};
 use crate::formats::ModFormat;
 use crate::health::{ModHealthStatus, check_mod_health};
-use crate::replacement::replace_file_safely;
+use crate::replacement::{replace_file_safely, replace_folder_safely};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
@@ -192,16 +192,31 @@ pub fn repair_mod_archive(
     );
 
     // Step 3: Install mod into temporary library
-    let installed = match library.install_mod_from_package(&lib_config, &input.to_string_lossy()) {
-        Ok(outcome) => outcome.into_mod(),
-        Err(e) => {
+    let source_archive = if format == ModFormat::FantomeFolder {
+        let temp_archive = work_path.join("source.fantome");
+        if let Err(e) = crate::formats::pack_fantome_folder(input, &temp_archive) {
             return Ok(RepairResult::Failed {
                 path: input.to_path_buf(),
                 format,
-                error: format!("Failed to import mod into temporary library: {e}"),
+                error: format!("Failed to read extracted mod folder: {e}"),
             });
         }
+        temp_archive
+    } else {
+        input.to_path_buf()
     };
+
+    let installed =
+        match library.install_mod_from_package(&lib_config, &source_archive.to_string_lossy()) {
+            Ok(outcome) => outcome.into_mod(),
+            Err(e) => {
+                return Ok(RepairResult::Failed {
+                    path: input.to_path_buf(),
+                    format,
+                    error: format!("Failed to import mod into temporary library: {e}"),
+                });
+            }
+        };
 
     // Step 4: Run LTK Manager repair engine
     let fix_report = match library.repair_mod(&lib_config, &installed.id) {
@@ -260,7 +275,31 @@ pub fn repair_mod_archive(
     }
 
     // Step 7: Safe replacement / writing to output
-    if let Err(e) = replace_file_safely(target_dest, &exported_file, backup) {
+    let is_output_folder = match output {
+        Some(out) => {
+            let out_str = out.to_string_lossy().to_ascii_lowercase();
+            !out_str.ends_with(".fantome") && !out_str.ends_with(".zip")
+        }
+        None => format == ModFormat::FantomeFolder,
+    };
+
+    if is_output_folder {
+        let temp_unpacked = work_path.join("unpacked_output");
+        if let Err(e) = crate::formats::unpack_fantome_archive(&exported_file, &temp_unpacked) {
+            return Ok(RepairResult::Failed {
+                path: input.to_path_buf(),
+                format,
+                error: format!("Failed to unpack repaired archive: {e}"),
+            });
+        }
+        if let Err(e) = replace_folder_safely(target_dest, &temp_unpacked, backup) {
+            return Ok(RepairResult::Failed {
+                path: input.to_path_buf(),
+                format,
+                error: format!("Failed to save repaired folder: {e}"),
+            });
+        }
+    } else if let Err(e) = replace_file_safely(target_dest, &exported_file, backup) {
         return Ok(RepairResult::Failed {
             path: input.to_path_buf(),
             format,

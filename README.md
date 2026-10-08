@@ -20,6 +20,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis 
 - **Machine-Readable JSON**: `--json` output writes pure JSON to `stdout` with progress and diagnostics directed to `stderr`.
 - **Honest Format Detection**:
   - `.fantome` / Fantome zip: Fully supported for inspection and repair.
+  - **Extracted Fantome Folder**: Fully supported! Folders structured as `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` (standard for Rose mod manager and unpacked mods) are inspected and repaired directly in-place or to an output directory.
   - `.modpkg`: Detected and reported as unrepairable (LTK Manager reads `.modpkg` directly with no unpacked or editable form).
   - Standalone `.wad.client`: Detected and reported as unsupported (standalone packed WADs store only xxHash64 hashes without custom author filenames; custom paths cannot be recovered without mod metadata).
 - **Auto-Discovery of League of Legends**: Automatically locates League installs via `RiotClientInstalls.json` or standard paths, with support for `--league` and persistent configuration.
@@ -66,8 +67,14 @@ Inspect a single archive or directory without modifying any files:
 # Check a single mod archive
 lol-mod-fixer check "C:\Mods\Ahri.fantome"
 
-# Check all mods in a folder
+# Check an extracted Fantome mod folder
+lol-mod-fixer check "C:\Users\Admin\AppData\Local\Rose\mods\skins\34000\Emilia_Anivia-1.0.0"
+
+# Check all mods in a folder (including extracted mod folders)
 lol-mod-fixer check "C:\Mods"
+
+# Recursively scan a folder containing subfolders of mods (e.g. Rose skin directories)
+lol-mod-fixer check "C:\Users\Admin\AppData\Local\Rose\mods\skins" -r
 
 # Verbose check with individual problem descriptions
 lol-mod-fixer check "C:\Mods\Ahri.fantome" -v
@@ -99,15 +106,18 @@ Unsupported:        0
 ```
 
 ### 3. Repair Mode (`repair`)
-Repair a mod archive or all archives in a directory:
+Repair a mod archive, extracted mod folder, or all mods in a directory:
 ```bash
-# Repair in-place
+# Repair an archive in-place
 lol-mod-fixer repair "C:\Mods\Ahri.fantome"
+
+# Repair an extracted mod folder in-place
+lol-mod-fixer repair "C:\Users\Admin\AppData\Local\Rose\mods\skins\34000\Emilia_Anivia-1.0.0"
 
 # Repair and output to a separate destination (preserves original)
 lol-mod-fixer repair "C:\Mods\Ahri.fantome" "C:\Mods\fixed\Ahri.fantome"
 
-# Repair with backup (.bak) of original file
+# Repair with backup (.bak) of original file/folder
 lol-mod-fixer repair "C:\Mods\Ahri.fantome" --backup
 
 # Dry-run: report what would be repaired without writing files
@@ -141,9 +151,10 @@ lol-mod-fixer config set-pause false
 
 ## Format Capabilities & Limitations
 
-| Format | Extension | Health Check | Repair Support | Technical Rationale |
+| Format | Extension / Structure | Health Check | Repair Support | Technical Rationale |
 |---|---|---|---|---|
-| **Fantome** | `.fantome`, `.zip` | ✅ Yes | ✅ Yes | Full support via `ltk-manager-library` and `ltk_fantome`. Outdated BIN property types and references are detected and repaired. |
+| **Fantome Archive** | `.fantome`, `.zip` | ✅ Yes | ✅ Yes | Full support via `ltk-manager-library` and `ltk_fantome`. Outdated BIN property types and references are detected and repaired. |
+| **Fantome Folder** | `<dir>/META/info.json`<br>`<dir>/WAD/*.wad.client` | ✅ Yes | ✅ Yes | Direct support for extracted mods and Rose directories. Analyzed and repaired in-place or to target folder with atomic rollback safety. |
 | **ModPkg** | `.modpkg` | ✅ Detected | ❌ Unrepairable | By design in LTK Manager, `.modpkg` is read straight out of its archive without an unpacked representation. Converting/repairing `.modpkg` is not supported upstream. |
 | **Client WAD** | `.wad.client`, `.wad` | ✅ Detected | ❌ Unsupported | Standalone WAD archives contain only 64-bit xxHash hashes in their table of contents. Custom author filenames cannot be recovered without mod project metadata. |
 

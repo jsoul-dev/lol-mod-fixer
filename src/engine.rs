@@ -55,12 +55,13 @@ pub fn execute_check(
     let (config, _) = resolve_ltk_config(cli_league, None);
     let target_path = target.unwrap_or_else(resolve_default_dir);
 
-    let (candidates, is_dir) = if target_path.is_file() {
-        (vec![target_path.clone()], false)
-    } else {
-        let list = scan_directory(&target_path, recursive)?;
-        (list, true)
-    };
+    let (candidates, is_dir) =
+        if target_path.is_file() || crate::formats::is_fantome_folder(&target_path) {
+            (vec![target_path.clone()], false)
+        } else {
+            let list = scan_directory(&target_path, recursive)?;
+            (list, true)
+        };
 
     printer.print_banner(if is_dir { Some(&target_path) } else { None });
 
@@ -109,8 +110,8 @@ pub fn execute_repair(
     let (config, _) = resolve_ltk_config(cli_league, None);
     let input_path = input.unwrap_or_else(resolve_default_dir);
 
-    if input_path.is_file() {
-        // Single file repair
+    if input_path.is_file() || crate::formats::is_fantome_folder(&input_path) {
+        // Single file or extracted mod folder repair
         printer.print_banner(None);
         let res = repair_mod_archive(&input_path, output.as_deref(), &config, backup, dry_run)?;
         printer.print_repair_item(0, 1, &res);

@@ -87,6 +87,7 @@ pub fn check_mod_health(path: &Path, config: &LtkConfig) -> FixerResult<HealthRe
 
     match format {
         ModFormat::Fantome => check_fantome_health(path, file_name, config),
+        ModFormat::FantomeFolder => check_fantome_folder_health(path, file_name, config),
         ModFormat::Modpkg => Ok(HealthReport {
             path: path.to_path_buf(),
             file_name,
@@ -234,4 +235,31 @@ fn check_fantome_health(
         problems: problems_list,
         reason: None,
     })
+}
+
+fn check_fantome_folder_health(
+    path: &Path,
+    file_name: String,
+    config: &LtkConfig,
+) -> FixerResult<HealthReport> {
+    let temp = tempfile::TempDir::new()?;
+    let temp_archive = temp.path().join("archive.fantome");
+    if let Err(e) = crate::formats::pack_fantome_folder(path, &temp_archive) {
+        return Ok(HealthReport {
+            path: path.to_path_buf(),
+            file_name,
+            format: ModFormat::FantomeFolder,
+            status: ModHealthStatus::Broken,
+            problem_count: 0,
+            repairable_count: 0,
+            unrepairable_count: 0,
+            problems: Vec::new(),
+            reason: Some(format!("Failed to read extracted mod folder: {e}")),
+        });
+    }
+
+    let mut report = check_fantome_health(&temp_archive, file_name, config)?;
+    report.path = path.to_path_buf();
+    report.format = ModFormat::FantomeFolder;
+    Ok(report)
 }
