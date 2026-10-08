@@ -11,7 +11,7 @@ if %errorLevel% == 0 (
     goto :run
 ) else (
     echo Requesting Administrator privileges via UAC to unlock restricted Rose folders...
-    %PWSH% "Start-Process cmd -ArgumentList '/c \"\"%~dpnx0\"\"' -Verb RunAs"
+    %PWSH% "Start-Process cmd -ArgumentList '/c \"\"%~dpnx0\" %*\"' -Verb RunAs"
     exit /b
 )
 
@@ -23,7 +23,7 @@ echo ======================================================================
 echo.
 
 if exist "%~dp0lol-mod-fixer.exe" (
-    "%~dp0lol-mod-fixer.exe" repair --pause
+    "%~dp0lol-mod-fixer.exe" repair --pause %*
 ) else (
     echo Error: lol-mod-fixer.exe was not found in %~dp0
     pause
