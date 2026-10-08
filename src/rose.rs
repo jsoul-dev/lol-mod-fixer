@@ -142,17 +142,60 @@ pub fn update_rose_manifest_if_present(mod_dir: &Path) -> FixerResult<bool> {
     // Calculate new hashes for the repaired folder
     let (new_folder_hash, new_wad_hashes) = compute_rose_hashes(mod_dir)?;
 
+    // Check if META/info.json provides an alternative mod Name
+    let meta_info_name: Option<String> = {
+        let meta_info = mod_dir.join("META").join("info.json");
+        let meta_info_lower = mod_dir.join("meta").join("info.json");
+        let info_path = if meta_info.is_file() {
+            Some(meta_info)
+        } else if meta_info_lower.is_file() {
+            Some(meta_info_lower)
+        } else {
+            None
+        };
+        info_path
+            .and_then(|p| fs_err::read_to_string(p).ok())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| {
+                v.get("Name")
+                    .or_else(|| v.get("name"))
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            })
+    };
+
     // Find the matching entry for this mod:
-    // 1. By entry.name == mod_name
+    // 1. By exact name or case-insensitive folder name
     // 2. By key == mod_name
-    // 3. By matching old folderHash or wadHashes
+    // 3. By matching metadata info.json Name
+    // 4. Fallback: if only 1 mod exists in this champion's manifest
     let mut matched_key: Option<String> = None;
     for (key, val) in mods_obj.iter() {
         let entry_name = val.get("name").and_then(|n| n.as_str());
-        if entry_name == Some(mod_name) || key == mod_name {
+        if entry_name == Some(mod_name)
+            || key == mod_name
+            || entry_name
+                .map(|n| n.eq_ignore_ascii_case(mod_name))
+                .unwrap_or(false)
+        {
             matched_key = Some(key.clone());
             break;
         }
+
+        if let Some(ref m_name) = meta_info_name {
+            if entry_name == Some(m_name)
+                || entry_name
+                    .map(|n| n.eq_ignore_ascii_case(m_name))
+                    .unwrap_or(false)
+            {
+                matched_key = Some(key.clone());
+                break;
+            }
+        }
+    }
+
+    if matched_key.is_none() && mods_obj.len() == 1 {
+        matched_key = mods_obj.keys().next().cloned();
     }
 
     let matched_key = match matched_key {
