@@ -110,9 +110,11 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
     }
 
     if restricted_count > 0 && !crate::permissions::is_elevated() {
+        use crossterm::style::Stylize;
         eprintln!(
-            "[!] Notice: {} folder(s) were inaccessible due to Windows/Rose permissions.",
-            restricted_count
+            "{} {} folder(s) were inaccessible due to Windows/Rose permissions.",
+            "[!] Notice:".yellow().bold(),
+            restricted_count.to_string().white().bold()
         );
         eprintln!("    To automatically unlock and repair all folders, run as Administrator:");
         eprintln!("    -> Right-click lol-mod-fixer.exe and select 'Run as administrator', OR");

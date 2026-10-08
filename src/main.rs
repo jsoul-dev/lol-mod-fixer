@@ -28,7 +28,37 @@ use crate::engine::{ensure_hashtables, execute_check, execute_repair};
 use crate::error::{FixerError, exit_codes};
 use crate::output::Printer;
 
+#[cfg(windows)]
+fn enable_windows_ansi_support() {
+    unsafe {
+        type HANDLE = *mut std::ffi::c_void;
+        type BOOL = i32;
+        type DWORD = u32;
+
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetStdHandle(nStdHandle: DWORD) -> HANDLE;
+            fn GetConsoleMode(hConsoleHandle: HANDLE, lpMode: *mut DWORD) -> BOOL;
+            fn SetConsoleMode(hConsoleHandle: HANDLE, dwMode: DWORD) -> BOOL;
+        }
+
+        const STD_OUTPUT_HANDLE: DWORD = -11i32 as u32;
+        const ENABLE_VIRTUAL_TERMINAL_PROCESSING: DWORD = 0x0004;
+
+        let handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        if !handle.is_null() && handle != (-1isize as *mut std::ffi::c_void) {
+            let mut mode: DWORD = 0;
+            if GetConsoleMode(handle, &mut mode) != 0 {
+                SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            }
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    enable_windows_ansi_support();
+
     let raw_args: Vec<String> = std::env::args().collect();
     let has_no_args = raw_args.len() <= 1;
 

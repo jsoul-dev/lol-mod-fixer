@@ -1,5 +1,4 @@
-//! Formatted console output and JSON serialization.
-
+use crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 use std::io::{Write, stdin};
 use std::path::Path;
@@ -74,10 +73,10 @@ impl Printer {
         if self.json {
             return;
         }
-        println!("League Mod Fixer (LTK Repair Engine)");
-        println!("=====================================");
+        println!("{}", "League Mod Fixer (LTK Repair Engine)".cyan().bold());
+        println!("{}", "=====================================".dark_cyan());
         if let Some(d) = dir {
-            println!("Directory: {}", d.display());
+            println!("Directory: {}", d.display().to_string().white().bold());
         }
         println!();
     }
@@ -86,57 +85,75 @@ impl Printer {
         if self.json {
             return;
         }
-        println!("[{}/{}] {}", idx + 1, total, report.file_name);
-        println!("      Format: {}", report.format.display_name());
-        println!("      Status: {}", report.status.display_name());
+        println!(
+            "{} {}",
+            format!("[{}/{}]", idx + 1, total).dark_grey(),
+            report.file_name.as_str().white().bold()
+        );
+        println!("      Format: {}", report.format.display_name().dark_grey());
+        let status_text = match report.status {
+            ModHealthStatus::Healthy => "HEALTHY".green().bold(),
+            ModHealthStatus::Repairable => "REPAIRABLE".yellow().bold(),
+            ModHealthStatus::Unrepairable => "UNREPAIRABLE".dark_red().bold(),
+            ModHealthStatus::Broken => "BROKEN".red().bold(),
+            ModHealthStatus::Unsupported => "UNSUPPORTED".magenta().bold(),
+            ModHealthStatus::Unavailable => "UNAVAILABLE".dark_grey().bold(),
+        };
+        println!("      Status: {status_text}");
 
         match report.status {
             ModHealthStatus::Healthy => {
-                println!("      No fixes needed.");
+                println!("      {}", "No fixes needed.".dark_grey());
             }
             ModHealthStatus::Repairable => {
                 println!(
                     "      Problems found: {} ({} repairable)",
-                    report.problem_count, report.repairable_count
+                    report.problem_count.to_string().yellow().bold(),
+                    report.repairable_count.to_string().cyan().bold()
                 );
                 for p in &report.problems {
                     if self.verbose || p.repairable {
                         let tag = if p.repairable {
-                            "[REPAIRABLE]"
+                            "[REPAIRABLE]".yellow().bold()
                         } else {
-                            "[UNREPAIRABLE]"
+                            "[UNREPAIRABLE]".red().bold()
                         };
-                        println!("        {} {} ({})", tag, p.description, p.rule_id);
+                        println!("        {} {} ({})", tag, p.description, p.rule_id.as_str().dark_grey());
                     }
                 }
             }
             ModHealthStatus::Unrepairable => {
                 if let Some(reason) = &report.reason {
-                    println!("      Reason: {reason}");
+                    println!("      Reason: {}", reason.as_str().yellow());
                 } else {
                     println!(
                         "      Problems found: {} (none can be auto-repaired)",
-                        report.problem_count
+                        report.problem_count.to_string().red().bold()
                     );
                     for p in &report.problems {
-                        println!("        [UNREPAIRABLE] {} ({})", p.description, p.rule_id);
+                        println!(
+                            "        {} {} ({})",
+                            "[UNREPAIRABLE]".red().bold(),
+                            p.description,
+                            p.rule_id.as_str().dark_grey()
+                        );
                     }
                 }
-                println!("      File left untouched.");
+                println!("      {}", "File left untouched.".dark_grey());
             }
             ModHealthStatus::Broken => {
                 let err = report.reason.as_deref().unwrap_or("Archive corrupted");
-                println!("      Reason: {err}");
-                println!("      File left untouched.");
+                println!("      Reason: {}", err.red());
+                println!("      {}", "File left untouched.".dark_grey());
             }
             ModHealthStatus::Unsupported => {
                 let reason = report.reason.as_deref().unwrap_or("Unsupported format");
-                println!("      Reason: {reason}");
-                println!("      File left untouched.");
+                println!("      Reason: {}", reason.magenta());
+                println!("      {}", "File left untouched.".dark_grey());
             }
             ModHealthStatus::Unavailable => {
-                println!("      Hashtable or game data is missing.");
-                println!("      File left untouched.");
+                println!("      {}", "Hashtable or game data is missing.".yellow());
+                println!("      {}", "File left untouched.".dark_grey());
             }
         }
         println!();
@@ -150,10 +167,14 @@ impl Printer {
         match res {
             RepairResult::Unchanged { path, format } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                println!("[{}/{}] {}", idx + 1, total, name);
-                println!("      Format: {}", format.display_name());
-                println!("      Status: HEALTHY / UNCHANGED");
-                println!("      No fixes needed. File left untouched.");
+                println!(
+                    "{} {}",
+                    format!("[{}/{}]", idx + 1, total).dark_grey(),
+                    name.white().bold()
+                );
+                println!("      Format: {}", format.display_name().dark_grey());
+                println!("      Status: {}", "HEALTHY / UNCHANGED".green().bold());
+                println!("      {}", "No fixes needed. File left untouched.".dark_grey());
             }
             RepairResult::Repaired {
                 path,
@@ -163,20 +184,27 @@ impl Printer {
                 verified,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                println!("[{}/{}] {}", idx + 1, total, name);
-                println!("      Format: {}", format.display_name());
-                println!("      Status: REPAIRABLE");
-                println!("      Applying fixes... Fixed: {fixes_applied}");
+                println!(
+                    "{} {}",
+                    format!("[{}/{}]", idx + 1, total).dark_grey(),
+                    name.white().bold()
+                );
+                println!("      Format: {}", format.display_name().dark_grey());
+                println!("      Status: {}", "REPAIRED".green().bold());
+                println!(
+                    "      Applying fixes... Fixed: {}",
+                    fixes_applied.to_string().cyan().bold()
+                );
                 print!("      Verifying... ");
                 if *verified {
-                    println!("SUCCESS (Clean / Verified)");
+                    println!("{}", "SUCCESS (Clean / Verified)".green().bold());
                 } else {
-                    println!("Repaired with remaining warnings");
+                    println!("{}", "Repaired with remaining warnings".yellow().bold());
                 }
                 if path == output_path {
-                    println!("      Replaced original safely.");
+                    println!("      {}", "Replaced original safely.".green());
                 } else {
-                    println!("      Saved to: {}", output_path.display());
+                    println!("      Saved to: {}", output_path.display().to_string().cyan());
                 }
             }
             RepairResult::Unrepairable {
@@ -185,11 +213,15 @@ impl Printer {
                 reason,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                println!("[{}/{}] {}", idx + 1, total, name);
-                println!("      Format: {}", format.display_name());
-                println!("      Status: UNREPAIRABLE");
-                println!("      Reason: {reason}");
-                println!("      File left untouched.");
+                println!(
+                    "{} {}",
+                    format!("[{}/{}]", idx + 1, total).dark_grey(),
+                    name.white().bold()
+                );
+                println!("      Format: {}", format.display_name().dark_grey());
+                println!("      Status: {}", "UNREPAIRABLE".dark_red().bold());
+                println!("      Reason: {}", reason.as_str().yellow());
+                println!("      {}", "File left untouched.".dark_grey());
             }
             RepairResult::Unsupported {
                 path,
@@ -197,11 +229,15 @@ impl Printer {
                 reason,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                println!("[{}/{}] {}", idx + 1, total, name);
-                println!("      Format: {}", format.display_name());
-                println!("      Status: UNSUPPORTED");
-                println!("      Reason: {reason}");
-                println!("      File left untouched.");
+                println!(
+                    "{} {}",
+                    format!("[{}/{}]", idx + 1, total).dark_grey(),
+                    name.white().bold()
+                );
+                println!("      Format: {}", format.display_name().dark_grey());
+                println!("      Status: {}", "UNSUPPORTED".magenta().bold());
+                println!("      Reason: {}", reason.as_str().magenta());
+                println!("      {}", "File left untouched.".dark_grey());
             }
             RepairResult::Failed {
                 path,
@@ -209,11 +245,15 @@ impl Printer {
                 error,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
-                println!("[{}/{}] {}", idx + 1, total, name);
-                println!("      Format: {}", format.display_name());
-                println!("      Status: REPAIR FAILED");
-                println!("      Reason: {error}");
-                println!("      File left untouched.");
+                println!(
+                    "{} {}",
+                    format!("[{}/{}]", idx + 1, total).dark_grey(),
+                    name.white().bold()
+                );
+                println!("      Format: {}", format.display_name().dark_grey());
+                println!("      Status: {}", "REPAIR FAILED".red().bold());
+                println!("      Reason: {}", error.as_str().red());
+                println!("      {}", "File left untouched.".dark_grey());
             }
         }
         println!();
@@ -263,14 +303,49 @@ impl Printer {
             return;
         }
 
-        println!("--------------------------------");
-        println!("Check complete\n");
-        println!("Mods scanned:       {scanned}");
-        println!("Healthy:            {healthy}");
-        println!("Repairable:         {repairable}");
-        println!("Unrepairable:       {unrepairable}");
-        println!("Broken:             {broken}");
-        println!("Unsupported:        {unsupported}");
+        println!("{}", "--------------------------------".dark_cyan());
+        println!("{}", "Check complete\n".white().bold());
+        println!("Mods scanned:       {}", scanned.to_string().white().bold());
+        println!(
+            "Healthy:            {}",
+            if healthy > 0 {
+                healthy.to_string().green().bold()
+            } else {
+                healthy.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Repairable:         {}",
+            if repairable > 0 {
+                repairable.to_string().yellow().bold()
+            } else {
+                repairable.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Unrepairable:       {}",
+            if unrepairable > 0 {
+                unrepairable.to_string().dark_red().bold()
+            } else {
+                unrepairable.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Broken:             {}",
+            if broken > 0 {
+                broken.to_string().red().bold()
+            } else {
+                broken.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Unsupported:        {}",
+            if unsupported > 0 {
+                unsupported.to_string().magenta().bold()
+            } else {
+                unsupported.to_string().dark_grey()
+            }
+        );
     }
 
     pub fn print_repair_summary(&self, results: &[RepairResult], dir: Option<&Path>) {
@@ -376,14 +451,49 @@ impl Printer {
             return;
         }
 
-        println!("--------------------------------");
-        println!("Scan & Repair complete\n");
-        println!("Mods scanned:       {scanned}");
-        println!("Healthy:            {healthy}");
-        println!("Repaired:           {repaired}");
-        println!("Unrepairable:       {unrepairable}");
-        println!("Failed:             {failed}");
-        println!("Unsupported:        {unsupported}");
+        println!("{}", "--------------------------------".dark_cyan());
+        println!("{}", "Scan & Repair complete\n".white().bold());
+        println!("Mods scanned:       {}", scanned.to_string().white().bold());
+        println!(
+            "Healthy:            {}",
+            if healthy > 0 {
+                healthy.to_string().green().bold()
+            } else {
+                healthy.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Repaired:           {}",
+            if repaired > 0 {
+                repaired.to_string().cyan().bold()
+            } else {
+                repaired.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Unrepairable:       {}",
+            if unrepairable > 0 {
+                unrepairable.to_string().dark_red().bold()
+            } else {
+                unrepairable.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Failed:             {}",
+            if failed > 0 {
+                failed.to_string().red().bold()
+            } else {
+                failed.to_string().dark_grey()
+            }
+        );
+        println!(
+            "Unsupported:        {}",
+            if unsupported > 0 {
+                unsupported.to_string().magenta().bold()
+            } else {
+                unsupported.to_string().dark_grey()
+            }
+        );
     }
 
     /// Prompt user to press enter when appropriate.
@@ -392,7 +502,7 @@ impl Printer {
             return;
         }
 
-        print!("\nPress Enter to exit...");
+        print!("{}", "\nPress Enter to exit...".cyan());
         let _ = std::io::stdout().flush();
         let mut buf = String::new();
         let _ = stdin().read_line(&mut buf);
