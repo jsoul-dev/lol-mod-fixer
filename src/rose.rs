@@ -242,7 +242,7 @@ pub fn update_rose_manifest_if_present(mod_dir: &Path) -> FixerResult<bool> {
     fs_err::write(&tmp_path, serialized)?;
     fs_err::rename(&tmp_path, &manifest_path)?;
 
-    tracing::info!(
+    tracing::debug!(
         "Updated Rose mod manifest at {} for '{}' (new folderHash: {})",
         manifest_path.display(),
         mod_name,

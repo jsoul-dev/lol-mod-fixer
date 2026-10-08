@@ -1,7 +1,7 @@
 //! Windows permissions and elevation utilities for unlocking restricted mod directories.
 
 use std::path::Path;
-use tracing::{info, warn};
+use tracing::debug;
 
 /// Check if the current process is running with elevated (Administrator) privileges on Windows.
 pub fn is_elevated() -> bool {
@@ -27,7 +27,7 @@ pub fn unlock_folder_permissions(folder: &Path) -> bool {
     #[cfg(windows)]
     {
         let folder_str = folder.to_string_lossy();
-        info!(
+        debug!(
             "Attempting to unlock NTFS permissions on '{}'...",
             folder_str
         );
@@ -69,9 +69,9 @@ pub fn unlock_folder_permissions(folder: &Path) -> bool {
         let ok = takeown_ok || grant_ok;
 
         if ok {
-            info!("Successfully unlocked permissions on '{}'", folder_str);
+            debug!("Successfully unlocked permissions on '{}'", folder_str);
         } else {
-            warn!(
+            debug!(
                 "Could not unlock permissions on '{}' (elevation may be required)",
                 folder_str
             );

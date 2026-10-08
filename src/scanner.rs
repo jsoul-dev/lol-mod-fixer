@@ -59,6 +59,7 @@ pub fn is_candidate_file(path: &Path) -> bool {
 /// Scan a directory for mod archives and extracted Fantome mod folders.
 pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> {
     let mut candidates = Vec::new();
+    let mut restricted_count = 0;
 
     // If running as Administrator, proactively ensure directory and children are accessible
     if crate::permissions::is_elevated() {
@@ -73,16 +74,15 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
                 Err(e) => {
                     let err_msg = e.to_string();
                     if err_msg.contains("os error 5") || err_msg.contains("Access is denied") {
+                        restricted_count += 1;
                         if crate::permissions::is_elevated() {
                             if let Some(err_path) = e.path() {
                                 crate::permissions::unlock_folder_permissions(err_path);
                             }
                         }
-                        tracing::warn!(
-                            "Skipping restricted entry: {e}. (Tip: Right-click 'Run as administrator' or pass --elevate to auto-unlock Rose folders)"
-                        );
+                        tracing::debug!("Restricted entry encountered: {e}");
                     } else {
-                        tracing::warn!("Skipping unreadable entry in {}: {e}", dir.display());
+                        tracing::debug!("Skipping unreadable entry in {}: {e}", dir.display());
                     }
                     continue;
                 }
@@ -107,6 +107,16 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
                 candidates.push(path);
             }
         }
+    }
+
+    if restricted_count > 0 && !crate::permissions::is_elevated() {
+        eprintln!(
+            "[!] Notice: {} folder(s) were inaccessible due to Windows/Rose permissions.",
+            restricted_count
+        );
+        eprintln!("    To automatically unlock and repair all folders, run as Administrator:");
+        eprintln!("    -> Right-click lol-mod-fixer.exe and select 'Run as administrator', OR");
+        eprintln!("    -> Run with: lol-mod-fixer.exe --elevate\n");
     }
 
     candidates.sort();

@@ -57,8 +57,10 @@ pub fn execute_check(
 
     let (candidates, is_dir) =
         if target_path.is_file() || crate::formats::is_fantome_folder(&target_path) {
+            printer.print_banner(None);
             (vec![target_path.clone()], false)
         } else {
+            printer.print_banner(Some(&target_path));
             let mut list = scan_directory(&target_path, recursive)?;
             if list.is_empty() && !recursive {
                 let sub_list = scan_directory(&target_path, true)?;
@@ -68,8 +70,6 @@ pub fn execute_check(
             }
             (list, true)
         };
-
-    printer.print_banner(if is_dir { Some(&target_path) } else { None });
 
     let mut reports = Vec::with_capacity(candidates.len());
     let total = candidates.len();
@@ -139,6 +139,8 @@ pub fn execute_repair(
         ));
     }
 
+    printer.print_banner(Some(&input_path));
+
     let mut candidates = scan_directory(&input_path, recursive)?;
     if candidates.is_empty() && !recursive {
         let sub_candidates = scan_directory(&input_path, true)?;
@@ -146,7 +148,6 @@ pub fn execute_repair(
             candidates = sub_candidates;
         }
     }
-    printer.print_banner(Some(&input_path));
 
     let total = candidates.len();
     if total == 0 {

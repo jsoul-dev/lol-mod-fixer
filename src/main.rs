@@ -52,20 +52,21 @@ fn main() -> ExitCode {
         }
     }
 
-    // Determine logging level
-    let log_level = if cli.json {
-        "warn"
-    } else if cli.verbose {
+    // Determine logging level:
+    // Silence internal engine tracing by default so normal CLI output is clean and professional.
+    // Use --verbose to display detailed debug logs.
+    let log_level = if cli.verbose {
         "debug"
     } else {
-        "info"
+        "warn"
     };
 
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
-        .with_writer(std::io::stderr) // Crucial: all logs go to stderr so stdout remains clean JSON
+        .with_writer(std::io::stderr) // Logs go to stderr so stdout remains clean JSON
+        .with_ansi(false) // Disable raw ANSI escape sequences for clean Windows console output
         .init();
 
     // Sync or check hashtables
