@@ -165,12 +165,41 @@ pub fn update_rose_manifest_if_present(mod_dir: &Path) -> FixerResult<bool> {
     };
 
     // Find the matching entry for this mod:
-    // 1. By exact name or case-insensitive folder name
-    // 2. By key == mod_name
+    // 0. By matching folderHash or key
+    // 1. By matching wadHashes
+    // 2. By exact name or case-insensitive folder name
     // 3. By matching metadata info.json Name
     // 4. Fallback: if only 1 mod exists in this champion's manifest
     let mut matched_key: Option<String> = None;
     for (key, val) in mods_obj.iter() {
+        if key == &new_folder_hash
+            || val.get("folderHash").and_then(|h| h.as_str()) == Some(&new_folder_hash)
+        {
+            matched_key = Some(key.clone());
+            break;
+        }
+
+        if let Some(entry_wads) = val.get("wadHashes").and_then(|w| w.as_object()) {
+            if !new_wad_hashes.is_empty() {
+                let mut matches_all_wads = true;
+                for (wad_path, wad_hash) in &new_wad_hashes {
+                    if let Some(existing_hash) = entry_wads.get(wad_path).and_then(|h| h.as_str()) {
+                        if existing_hash != wad_hash {
+                            matches_all_wads = false;
+                            break;
+                        }
+                    } else {
+                        matches_all_wads = false;
+                        break;
+                    }
+                }
+                if matches_all_wads {
+                    matched_key = Some(key.clone());
+                    break;
+                }
+            }
+        }
+
         let entry_name = val.get("name").and_then(|n| n.as_str());
         if entry_name == Some(mod_name)
             || key == mod_name

@@ -2,6 +2,8 @@
 //!
 //! Reuses the official LeagueToolkit/ltk-manager repair and health checking engine.
 
+pub mod beautify;
+pub mod champions;
 mod cli;
 mod config;
 mod engine;
@@ -143,13 +145,14 @@ fn main() -> ExitCode {
 }
 
 fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
+    let beautify = !cli.no_beautify;
     match cli.command {
         Some(Commands::Check(args)) => {
             let target = args.path.or(args.dir).or(cli.dir).or(cli.target);
             let league = args.league.or(cli.league);
             let recursive = args.recursive || cli.recursive;
             let check_printer = Printer::new(args.json || cli.json, args.verbose || cli.verbose);
-            execute_check(target, league, recursive, &check_printer)
+            execute_check(target, league, recursive, beautify, &check_printer)
         }
         Some(Commands::Repair(args)) => {
             let input = args.input.or(args.dir).or(cli.dir).or(cli.target);
@@ -166,6 +169,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 backup,
                 dry_run,
                 recursive,
+                beautify,
                 &repair_printer,
             )
         }
@@ -184,6 +188,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 backup,
                 dry_run,
                 recursive,
+                beautify,
                 &repair_printer,
             )
         }
@@ -199,7 +204,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let backup = cli.backup;
             let dry_run = cli.dry_run;
             let recursive = true;
-            execute_repair(target, None, league, backup, dry_run, recursive, printer)
+            execute_repair(target, None, league, backup, dry_run, recursive, beautify, printer)
         }
     }
 }

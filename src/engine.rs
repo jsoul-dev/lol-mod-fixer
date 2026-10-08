@@ -50,6 +50,7 @@ pub fn execute_check(
     target: Option<PathBuf>,
     cli_league: Option<PathBuf>,
     recursive: bool,
+    beautify: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
     let (config, _) = resolve_ltk_config(cli_league, None);
@@ -83,7 +84,15 @@ pub fn execute_check(
     }
 
     for (idx, path) in candidates.iter().enumerate() {
-        let report = check_mod_health(path, &config)?;
+        let active_path = if beautify && crate::formats::is_fantome_folder(path) {
+            match crate::beautify::beautify_and_sync_folder(path) {
+                Ok(Some(new_p)) => new_p,
+                _ => path.clone(),
+            }
+        } else {
+            path.clone()
+        };
+        let report = check_mod_health(&active_path, &config)?;
         printer.print_check_item(idx, total, &report);
         reports.push(report);
     }
@@ -111,6 +120,7 @@ pub fn execute_repair(
     backup: bool,
     dry_run: bool,
     recursive: bool,
+    beautify: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
     let (config, _) = resolve_ltk_config(cli_league, None);
@@ -119,7 +129,15 @@ pub fn execute_repair(
     if input_path.is_file() || crate::formats::is_fantome_folder(&input_path) {
         // Single file or extracted mod folder repair
         printer.print_banner(None);
-        let res = repair_mod_archive(&input_path, output.as_deref(), &config, backup, dry_run)?;
+        let effective_input = if beautify && crate::formats::is_fantome_folder(&input_path) {
+            match crate::beautify::beautify_and_sync_folder(&input_path) {
+                Ok(Some(new_p)) => new_p,
+                _ => input_path.clone(),
+            }
+        } else {
+            input_path.clone()
+        };
+        let res = repair_mod_archive(&effective_input, output.as_deref(), &config, backup, dry_run)?;
         printer.print_repair_item(0, 1, &res);
         printer.print_repair_summary(std::slice::from_ref(&res), None);
 
@@ -160,7 +178,15 @@ pub fn execute_repair(
 
     let mut results = Vec::with_capacity(total);
     for (idx, path) in candidates.iter().enumerate() {
-        let res = repair_mod_archive(path, None, &config, backup, dry_run)?;
+        let active_path = if beautify && crate::formats::is_fantome_folder(path) {
+            match crate::beautify::beautify_and_sync_folder(path) {
+                Ok(Some(new_p)) => new_p,
+                _ => path.clone(),
+            }
+        } else {
+            path.clone()
+        };
+        let res = repair_mod_archive(&active_path, None, &config, backup, dry_run)?;
         printer.print_repair_item(idx, total, &res);
         results.push(res);
     }

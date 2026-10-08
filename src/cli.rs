@@ -63,6 +63,10 @@ pub struct Cli {
     /// Request Administrator elevation via UAC to unlock restricted mod folders.
     #[arg(long)]
     pub elevate: bool,
+
+    /// Disable automatic beautification of mod names and folders.
+    #[arg(long)]
+    pub no_beautify: bool,
 }
 
 #[derive(Subcommand, Debug)]

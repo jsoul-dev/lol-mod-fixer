@@ -665,3 +665,152 @@ fn test_rose_multiple_mods_on_same_skin_id() {
         106000
     );
 }
+
+#[test]
+fn test_beautify_all_user_examples() {
+    use crate::beautify::compute_beautified_title;
+
+    // Example 1: Sonic_Rammus-1.0.0 -> Sonic Rammus v1.0
+    let res1 = compute_beautified_title("Sonic_Rammus-1.0.0", Some("33000"), None, None, &[]);
+    assert_eq!(res1, "Sonic Rammus v1.0");
+
+    // Example 2: Rammus_Sonic-1.0.0 -> Sonic Rammus v1.0
+    let res2 = compute_beautified_title("Rammus_Sonic-1.0.0", Some("33000"), None, None, &[]);
+    assert_eq!(res2, "Sonic Rammus v1.0");
+
+    // Example 3: Chun_Li_Garen-2.0 -> Chun Li Garen v2.0
+    let res3 = compute_beautified_title("Chun_Li_Garen-2.0", Some("86000"), None, None, &[]);
+    assert_eq!(res3, "Chun Li Garen v2.0");
+
+    // Example 4: Ansem_Malzahar-Main -> Ansem Malzahar v1.1.2
+    let res4 = compute_beautified_title(
+        "Ansem_Malzahar-Main",
+        Some("90000"),
+        Some("Malzahar - Ansem"),
+        Some("1.1.2"),
+        &[],
+    );
+    assert_eq!(res4, "Ansem Malzahar v1.1.2");
+
+    // Example 5: Eto_Shyvana-main -> Eto Shyvana v1.0
+    let res5 = compute_beautified_title(
+        "Eto_Shyvana-main",
+        Some("102000"),
+        Some("Eto Shyvana"),
+        Some("1.0.0"),
+        &[],
+    );
+    assert_eq!(res5, "Eto Shyvana v1.0");
+
+    // Example 6: Angel-v1.0.0 -> Angel Volibear v1.0
+    let res6 = compute_beautified_title("Angel-v1.0.0", Some("106000"), None, None, &[]);
+    assert_eq!(res6, "Angel Volibear v1.0");
+
+    // Example 7: tank-volibear -> Tank Volibear v1.0 (with capitalization check)
+    let res7 = compute_beautified_title(
+        "tank-volibear",
+        Some("106000"),
+        Some("tank volibear"),
+        Some("1.0.0"),
+        &[],
+    );
+    assert_eq!(res7, "Tank Volibear v1.0");
+
+    // Example 8: Zacian_Hecarim-1.1.0 -> Zacian Hecarim v1.1
+    let res8 = compute_beautified_title("Zacian_Hecarim-1.1.0", Some("120000"), None, None, &[]);
+    assert_eq!(res8, "Zacian Hecarim v1.1");
+
+    // Example 9: Shadow_The_Hedgehog__Ekko_-1.1.3 -> Shadow The Hedgehog Ekko v1.1.3
+    let res9 = compute_beautified_title(
+        "Shadow_The_Hedgehog__Ekko_-1.1.3",
+        Some("245000"),
+        None,
+        None,
+        &[],
+    );
+    assert_eq!(res9, "Shadow The Hedgehog Ekko v1.1.3");
+
+    // Idempotency: Running beautification on already-beautified titles MUST remain unchanged
+    let all_beautified = [
+        (&res1, "33000"),
+        (&res2, "33000"),
+        (&res3, "86000"),
+        (&res4, "90000"),
+        (&res5, "102000"),
+        (&res6, "106000"),
+        (&res7, "106000"),
+        (&res8, "120000"),
+        (&res9, "245000"),
+    ];
+    for (title, parent_id) in all_beautified {
+        let idempotent = compute_beautified_title(title, Some(parent_id), None, None, &[]);
+        assert_eq!(&idempotent, title, "Beautification must be strictly idempotent");
+    }
+}
+
+#[test]
+fn test_beautify_and_sync_folder_in_rose() {
+    let temp = TempDir::new().unwrap();
+    let champ_dir = temp.path().join("106000");
+    fs_err::create_dir_all(&champ_dir).unwrap();
+
+    let raw_mod_dir = champ_dir.join("tank-volibear");
+    let meta_dir = raw_mod_dir.join("META");
+    let wad_dir = raw_mod_dir.join("WAD");
+    fs_err::create_dir_all(&meta_dir).unwrap();
+    fs_err::create_dir_all(&wad_dir).unwrap();
+
+    fs_err::write(
+        meta_dir.join("info.json"),
+        b"{\"Name\": \"tank volibear\", \"Version\": \"1.0.0\"}",
+    )
+    .unwrap();
+    fs_err::write(wad_dir.join("Volibear.wad.client"), b"volibear-wad-content-1").unwrap();
+
+    // Initial manifest
+    let manifest_path = champ_dir.join("rose_mod_targets.json");
+    let (initial_folder_hash, initial_wad_hashes) =
+        crate::rose::compute_rose_hashes(&raw_mod_dir).unwrap();
+    let initial_manifest = serde_json::json!({
+        "version": 1,
+        "championId": 106,
+        "targets": [],
+        "mods": {
+            &initial_folder_hash: {
+                "name": "tank-volibear",
+                "folderHash": &initial_folder_hash,
+                "wadHashes": initial_wad_hashes,
+                "targets": [106000]
+            }
+        }
+    });
+    fs_err::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&initial_manifest).unwrap(),
+    )
+    .unwrap();
+
+    // Execute beautification on the mod directory
+    let new_path = crate::beautify::beautify_and_sync_folder(&raw_mod_dir).unwrap();
+    assert!(new_path.is_some());
+    let beautified_path = new_path.unwrap();
+    assert_eq!(
+        beautified_path.file_name().unwrap().to_str().unwrap(),
+        "Tank Volibear v1.0"
+    );
+    assert!(!raw_mod_dir.exists(), "Old folder must be renamed");
+    assert!(beautified_path.exists(), "New beautified folder must exist");
+
+    // Verify rose manifest updated with new name and hashes
+    let read_manifest: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    let mods = read_manifest.get("mods").unwrap().as_object().unwrap();
+    assert_eq!(mods.len(), 1);
+
+    let (expected_new_hash, _) =
+        crate::rose::compute_rose_hashes(&beautified_path).unwrap();
+    let entry = mods.get(&expected_new_hash).expect("Must be keyed under new folder hash");
+    assert_eq!(entry.get("name").unwrap().as_str().unwrap(), "Tank Volibear v1.0");
+    assert_eq!(entry.get("folderHash").unwrap().as_str().unwrap(), expected_new_hash);
+}
+
