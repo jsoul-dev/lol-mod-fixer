@@ -21,6 +21,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis 
 - **Honest Format Detection**:
   - `.fantome` / Fantome zip: Fully supported for inspection and repair.
   - **Extracted Fantome Folder**: Fully supported! Folders structured as `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` (standard for Rose mod manager and unpacked mods) are inspected and repaired directly in-place or to an output directory.
+  - **Rose Mod Manager Manifest Synchronization**: Automatically updates Rose's `rose_mod_targets.json` (and `rose_wad_targets.json`) with the newly repaired `folderHash` and `wadHashes` using Rose's exact hashing algorithm, preserving target skin IDs and display names.
   - `.modpkg`: Detected and reported as unrepairable (LTK Manager reads `.modpkg` directly with no unpacked or editable form).
   - Standalone `.wad.client`: Detected and reported as unsupported (standalone packed WADs store only xxHash64 hashes without custom author filenames; custom paths cannot be recovered without mod metadata).
 - **Auto-Discovery of League of Legends**: Automatically locates League installs via `RiotClientInstalls.json` or standard paths, with support for `--league` and persistent configuration.

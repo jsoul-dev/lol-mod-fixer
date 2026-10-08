@@ -437,3 +437,102 @@ fn test_scan_directory_with_extracted_fantome_folders() {
     assert!(found_in_skins.contains(&mod_folder));
     assert!(found_in_skins.contains(&loose_fantome));
 }
+
+#[test]
+fn test_rose_manifest_synchronization() {
+    let temp = TempDir::new().unwrap();
+    let champ_dir = temp.path().join("34000");
+    fs_err::create_dir_all(&champ_dir).unwrap();
+
+    let mod_dir = champ_dir.join("Emilia_Anivia-1.0.0");
+    let meta_dir = mod_dir.join("META");
+    let wad_dir = mod_dir.join("WAD");
+    fs_err::create_dir_all(&meta_dir).unwrap();
+    fs_err::create_dir_all(&wad_dir).unwrap();
+
+    fs_err::write(meta_dir.join("info.json"), b"{\"Name\": \"Anivia\"}").unwrap();
+    fs_err::write(wad_dir.join("Anivia.wad.client"), b"old-wad-bytes-12345").unwrap();
+
+    // Create an initial Rose targets manifest with old hashes
+    let manifest_path = champ_dir.join("rose_mod_targets.json");
+    let initial_manifest = serde_json::json!({
+        "version": 1,
+        "championId": 34,
+        "targets": [],
+        "mods": {
+            "old_hash_key_111": {
+                "name": "Emilia_Anivia-1.0.0",
+                "folderHash": "old_hash_key_111",
+                "wadHashes": {
+                    "WAD/Anivia.wad.client": "old_wad_hash_999"
+                },
+                "targets": [34000],
+                "displayName": "Emilia Anivia"
+            }
+        }
+    });
+    fs_err::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&initial_manifest).unwrap(),
+    )
+    .unwrap();
+
+    // Compute Rose hashes directly
+    let (folder_hash, wad_hashes) = crate::rose::compute_rose_hashes(&mod_dir).unwrap();
+    assert!(!folder_hash.is_empty());
+    assert_eq!(wad_hashes.len(), 1);
+    assert!(wad_hashes.contains_key("WAD/Anivia.wad.client"));
+
+    // Modify WAD content to simulate repair
+    fs_err::write(
+        wad_dir.join("Anivia.wad.client"),
+        b"repaired-wad-bytes-99999",
+    )
+    .unwrap();
+
+    // Update Rose manifest
+    let updated = crate::rose::update_rose_manifest_if_present(&mod_dir).unwrap();
+    assert!(updated);
+
+    // Read back manifest and verify
+    let read_back: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+
+    let mods = read_back.get("mods").unwrap().as_object().unwrap();
+    // Old key must be gone
+    assert!(!mods.contains_key("old_hash_key_111"));
+
+    // New folder hash key must exist
+    let (new_folder_hash, new_wad_hashes) = crate::rose::compute_rose_hashes(&mod_dir).unwrap();
+    assert!(mods.contains_key(&new_folder_hash));
+
+    let entry = mods.get(&new_folder_hash).unwrap();
+    assert_eq!(
+        entry.get("name").unwrap().as_str().unwrap(),
+        "Emilia_Anivia-1.0.0"
+    );
+    assert_eq!(
+        entry.get("folderHash").unwrap().as_str().unwrap(),
+        new_folder_hash
+    );
+    assert_eq!(
+        entry.get("displayName").unwrap().as_str().unwrap(),
+        "Emilia Anivia"
+    );
+    assert_eq!(
+        entry.get("targets").unwrap().as_array().unwrap()[0]
+            .as_u64()
+            .unwrap(),
+        34000
+    );
+
+    let stored_wads = entry.get("wadHashes").unwrap().as_object().unwrap();
+    assert_eq!(
+        stored_wads
+            .get("WAD/Anivia.wad.client")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        new_wad_hashes.get("WAD/Anivia.wad.client").unwrap()
+    );
+}

@@ -35,6 +35,7 @@ tempfile = "3"
 fs-err = "3"
 crossterm = "0.28"
 zip = "2.4.2"
+sha2 = "0.10"
 
 [dev-dependencies]
 ltk-manager-assets = { path = "vendor/ltk-manager/crates/ltk-manager-assets", features = ["test-util"] }

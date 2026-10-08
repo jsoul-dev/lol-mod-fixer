@@ -11,6 +11,7 @@ mod health;
 mod output;
 mod repair;
 mod replacement;
+pub mod rose;
 mod scanner;
 
 #[cfg(test)]

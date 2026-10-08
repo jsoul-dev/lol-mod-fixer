@@ -299,6 +299,11 @@ pub fn repair_mod_archive(
                 error: format!("Failed to save repaired folder: {e}"),
             });
         }
+
+        // If this mod is inside a Rose skin directory, synchronize rose_mod_targets.json
+        if let Err(e) = crate::rose::update_rose_manifest_if_present(target_dest) {
+            tracing::warn!("Failed to synchronize Rose targets manifest: {e}");
+        }
     } else if let Err(e) = replace_file_safely(target_dest, &exported_file, backup) {
         return Ok(RepairResult::Failed {
             path: input.to_path_buf(),
