@@ -60,6 +60,11 @@ pub fn is_candidate_file(path: &Path) -> bool {
 pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> {
     let mut candidates = Vec::new();
 
+    // If running as Administrator, proactively ensure directory and children are accessible
+    if crate::permissions::is_elevated() {
+        crate::permissions::unlock_folder_permissions(dir);
+    }
+
     if recursive {
         let mut it = WalkDir::new(dir).follow_links(false).into_iter();
         while let Some(entry_res) = it.next() {
@@ -68,8 +73,11 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
                 Err(e) => {
                     let err_msg = e.to_string();
                     if err_msg.contains("os error 5") || err_msg.contains("Access is denied") {
+                        if let Some(err_path) = e.path() {
+                            crate::permissions::unlock_folder_permissions(err_path);
+                        }
                         tracing::warn!(
-                            "Skipping locked entry: {e}. (Tip: If Rose or League is currently running, close them to release file locks)"
+                            "Skipping restricted/locked entry: {e}. (Tip: Run as Administrator to auto-unlock Rose folders)"
                         );
                     } else {
                         tracing::warn!("Skipping unreadable entry in {}: {e}", dir.display());

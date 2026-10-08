@@ -9,6 +9,7 @@ mod error;
 mod formats;
 mod health;
 mod output;
+pub mod permissions;
 mod repair;
 mod replacement;
 pub mod rose;
