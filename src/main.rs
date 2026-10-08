@@ -141,12 +141,13 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             Ok(exit_codes::SUCCESS)
         }
         None => {
-            // Default mode: scan directory (containing executable, or explicit --dir) and repair
+            // Default mode: scan directory (containing executable, or explicit --dir / drag-and-drop) and repair.
+            // Automatically recursive by default so nested mods (e.g. skins/<champ_id>/<mod_name>) are discovered.
             let target = cli.dir.or(cli.target);
             let league = cli.league;
             let backup = cli.backup;
             let dry_run = cli.dry_run;
-            let recursive = cli.recursive;
+            let recursive = true;
             execute_repair(target, None, league, backup, dry_run, recursive, printer)
         }
     }

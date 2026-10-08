@@ -66,7 +66,14 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(e) => {
-                    tracing::warn!("Skipping unreadable entry in {}: {e}", dir.display());
+                    let err_msg = e.to_string();
+                    if err_msg.contains("os error 5") || err_msg.contains("Access is denied") {
+                        tracing::warn!(
+                            "Skipping locked entry: {e}. (Tip: If Rose or League is currently running, close them to release file locks)"
+                        );
+                    } else {
+                        tracing::warn!("Skipping unreadable entry in {}: {e}", dir.display());
+                    }
                     continue;
                 }
             };

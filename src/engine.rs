@@ -59,7 +59,13 @@ pub fn execute_check(
         if target_path.is_file() || crate::formats::is_fantome_folder(&target_path) {
             (vec![target_path.clone()], false)
         } else {
-            let list = scan_directory(&target_path, recursive)?;
+            let mut list = scan_directory(&target_path, recursive)?;
+            if list.is_empty() && !recursive {
+                let sub_list = scan_directory(&target_path, true)?;
+                if !sub_list.is_empty() {
+                    list = sub_list;
+                }
+            }
             (list, true)
         };
 
@@ -133,7 +139,13 @@ pub fn execute_repair(
         ));
     }
 
-    let candidates = scan_directory(&input_path, recursive)?;
+    let mut candidates = scan_directory(&input_path, recursive)?;
+    if candidates.is_empty() && !recursive {
+        let sub_candidates = scan_directory(&input_path, true)?;
+        if !sub_candidates.is_empty() {
+            candidates = sub_candidates;
+        }
+    }
     printer.print_banner(Some(&input_path));
 
     let total = candidates.len();
