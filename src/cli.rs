@@ -59,6 +59,10 @@ pub struct Cli {
     /// Synchronize or update local hashtables from mimir before starting.
     #[arg(long)]
     pub sync_hashtables: bool,
+
+    /// Request Administrator elevation via UAC to unlock restricted mod folders.
+    #[arg(long)]
+    pub elevate: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -101,6 +105,10 @@ pub struct TargetArgs {
     /// Verbose diagnostic output.
     #[arg(short, long)]
     pub verbose: bool,
+
+    /// Request Administrator elevation via UAC to unlock restricted mod folders.
+    #[arg(long)]
+    pub elevate: bool,
 }
 
 #[derive(Args, Debug)]
@@ -144,6 +152,10 @@ pub struct RepairArgs {
     /// Explicitly allow in-place replacement for single file.
     #[arg(long)]
     pub in_place: bool,
+
+    /// Request Administrator elevation via UAC to unlock restricted mod folders.
+    #[arg(long)]
+    pub elevate: bool,
 }
 
 #[derive(Args, Debug)]

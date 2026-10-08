@@ -34,6 +34,24 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
+    // Check if Administrator elevation was explicitly requested
+    let wants_elevate = cli.elevate
+        || match &cli.command {
+            Some(Commands::Check(args)) => args.elevate,
+            Some(Commands::Repair(args)) => args.elevate,
+            Some(Commands::Auto(args)) => args.elevate,
+            _ => false,
+        };
+
+    if wants_elevate && !permissions::is_elevated() {
+        if permissions::try_self_elevate() {
+            return ExitCode::SUCCESS;
+        } else {
+            eprintln!("Failed to acquire elevated Administrator privileges via UAC.");
+            return ExitCode::from(exit_codes::REPAIRABLE_OR_FAILED as u8);
+        }
+    }
+
     // Determine logging level
     let log_level = if cli.json {
         "warn"

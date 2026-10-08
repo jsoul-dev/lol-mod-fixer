@@ -33,7 +33,7 @@ pub fn unlock_folder_permissions(folder: &Path) -> bool {
         );
 
         // Step 1: Take ownership recursively
-        let _ = std::process::Command::new("takeown")
+        let takeown_res = std::process::Command::new("takeown")
             .args(["/F", &folder_str, "/R", "/D", "Y"])
             .output();
 
@@ -50,12 +50,23 @@ pub fn unlock_folder_permissions(folder: &Path) -> bool {
             .output();
 
         // Step 3: Reset inheritance
-        let icacls_reset = std::process::Command::new("icacls")
+        let _icacls_reset = std::process::Command::new("icacls")
             .args([&folder_str, "/reset", "/T", "/C", "/Q"])
             .output();
 
-        let ok = matches!(icacls_grant, Ok(ref o) if o.status.success())
-            || matches!(icacls_reset, Ok(ref o) if o.status.success());
+        let takeown_ok = matches!(takeown_res, Ok(ref o) if o.status.success());
+        let grant_ok = match &icacls_grant {
+            Ok(o) => {
+                let out = String::from_utf8_lossy(&o.stdout);
+                let err = String::from_utf8_lossy(&o.stderr);
+                o.status.success()
+                    && !out.contains("Failed processing")
+                    && !err.contains("Access is denied")
+            }
+            Err(_) => false,
+        };
+
+        let ok = takeown_ok || grant_ok;
 
         if ok {
             info!("Successfully unlocked permissions on '{}'", folder_str);
@@ -81,8 +92,17 @@ pub fn try_self_elevate() -> bool {
             Err(_) => return false,
         };
 
-        let raw_args: Vec<String> = std::env::args().skip(1).collect();
-        let arg_str = raw_args
+        let mut elevated_args: Vec<String> = std::env::args()
+            .skip(1)
+            .filter(|a| a != "--elevate")
+            .collect();
+
+        // If no pause preference was explicitly passed, add --pause so the user sees results
+        if !elevated_args.iter().any(|a| a == "--pause" || a == "--no-pause") {
+            elevated_args.push("--pause".to_string());
+        }
+
+        let arg_str = elevated_args
             .iter()
             .map(|a| format!("\"{}\"", a.replace('"', "\\\"")))
             .collect::<Vec<_>>()

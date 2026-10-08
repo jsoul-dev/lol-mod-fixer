@@ -73,11 +73,13 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
                 Err(e) => {
                     let err_msg = e.to_string();
                     if err_msg.contains("os error 5") || err_msg.contains("Access is denied") {
-                        if let Some(err_path) = e.path() {
-                            crate::permissions::unlock_folder_permissions(err_path);
+                        if crate::permissions::is_elevated() {
+                            if let Some(err_path) = e.path() {
+                                crate::permissions::unlock_folder_permissions(err_path);
+                            }
                         }
                         tracing::warn!(
-                            "Skipping restricted/locked entry: {e}. (Tip: Run as Administrator to auto-unlock Rose folders)"
+                            "Skipping restricted entry: {e}. (Tip: Right-click 'Run as administrator' or pass --elevate to auto-unlock Rose folders)"
                         );
                     } else {
                         tracing::warn!("Skipping unreadable entry in {}: {e}", dir.display());
