@@ -536,3 +536,132 @@ fn test_rose_manifest_synchronization() {
         new_wad_hashes.get("WAD/Anivia.wad.client").unwrap()
     );
 }
+
+#[test]
+fn test_rose_multiple_mods_on_same_skin_id() {
+    let temp = TempDir::new().unwrap();
+    let champ_dir = temp.path().join("106000");
+    fs_err::create_dir_all(&champ_dir).unwrap();
+
+    // Mod 1: tank-volibear
+    let mod1_dir = champ_dir.join("tank-volibear");
+    fs_err::create_dir_all(mod1_dir.join("META")).unwrap();
+    fs_err::create_dir_all(mod1_dir.join("WAD")).unwrap();
+    fs_err::write(mod1_dir.join("META/info.json"), b"{\"Name\": \"Volibear\"}").unwrap();
+    fs_err::write(
+        mod1_dir.join("WAD/Volibear.wad.client"),
+        b"volibear-wad-initial",
+    )
+    .unwrap();
+
+    // Mod 2: Angel-v1.0.0
+    let mod2_dir = champ_dir.join("Angel-v1.0.0");
+    fs_err::create_dir_all(mod2_dir.join("META")).unwrap();
+    fs_err::create_dir_all(mod2_dir.join("WAD")).unwrap();
+    fs_err::write(mod2_dir.join("META/info.json"), b"{\"Name\": \"Angel\"}").unwrap();
+    fs_err::write(
+        mod2_dir.join("WAD/Volibear.wad.client"),
+        b"angel-wad-initial",
+    )
+    .unwrap();
+
+    let (mod1_init_folder_hash, mod1_init_wads) =
+        crate::rose::compute_rose_hashes(&mod1_dir).unwrap();
+    let (mod2_init_folder_hash, mod2_init_wads) =
+        crate::rose::compute_rose_hashes(&mod2_dir).unwrap();
+
+    // Create Rose manifest with both mods
+    let manifest_path = champ_dir.join("rose_mod_targets.json");
+    let initial_manifest = serde_json::json!({
+        "version": 1,
+        "championId": 106,
+        "targets": [],
+        "mods": {
+            &mod1_init_folder_hash: {
+                "name": "tank-volibear",
+                "folderHash": &mod1_init_folder_hash,
+                "wadHashes": mod1_init_wads,
+                "targets": [106000]
+            },
+            &mod2_init_folder_hash: {
+                "name": "Angel-v1.0.0",
+                "folderHash": &mod2_init_folder_hash,
+                "wadHashes": mod2_init_wads,
+                "targets": [106000]
+            }
+        }
+    });
+    fs_err::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&initial_manifest).unwrap(),
+    )
+    .unwrap();
+
+    // Simulate repair of Mod 2 (Angel) only
+    fs_err::write(
+        mod2_dir.join("WAD/Volibear.wad.client"),
+        b"angel-wad-repaired-456",
+    )
+    .unwrap();
+    let updated2 = crate::rose::update_rose_manifest_if_present(&mod2_dir).unwrap();
+    assert!(updated2);
+
+    // Verify manifest: Mod 2 is updated, Mod 1 is preserved untouched!
+    let read1: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    let mods1 = read1.get("mods").unwrap().as_object().unwrap();
+    assert_eq!(mods1.len(), 2, "Both mods must still exist in manifest");
+    assert!(
+        mods1.contains_key(&mod1_init_folder_hash),
+        "Mod 1 must be untouched"
+    );
+
+    let (mod2_new_hash, _) = crate::rose::compute_rose_hashes(&mod2_dir).unwrap();
+    assert!(
+        mods1.contains_key(&mod2_new_hash),
+        "Mod 2 must have new key"
+    );
+
+    // Now simulate repair of Mod 1 (Volibear) as well
+    fs_err::write(
+        mod1_dir.join("WAD/Volibear.wad.client"),
+        b"volibear-wad-repaired-789",
+    )
+    .unwrap();
+    let updated1 = crate::rose::update_rose_manifest_if_present(&mod1_dir).unwrap();
+    assert!(updated1);
+
+    // Verify manifest: BOTH mods now have their new hashes and targets intact
+    let read2: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    let mods2 = read2.get("mods").unwrap().as_object().unwrap();
+    assert_eq!(mods2.len(), 2, "Both mods must still exist in manifest");
+
+    let (mod1_new_hash, _) = crate::rose::compute_rose_hashes(&mod1_dir).unwrap();
+    assert!(mods2.contains_key(&mod1_new_hash));
+    assert!(mods2.contains_key(&mod2_new_hash));
+
+    let m1_entry = mods2.get(&mod1_new_hash).unwrap();
+    assert_eq!(
+        m1_entry.get("name").unwrap().as_str().unwrap(),
+        "tank-volibear"
+    );
+    assert_eq!(
+        m1_entry.get("targets").unwrap().as_array().unwrap()[0]
+            .as_u64()
+            .unwrap(),
+        106000
+    );
+
+    let m2_entry = mods2.get(&mod2_new_hash).unwrap();
+    assert_eq!(
+        m2_entry.get("name").unwrap().as_str().unwrap(),
+        "Angel-v1.0.0"
+    );
+    assert_eq!(
+        m2_entry.get("targets").unwrap().as_array().unwrap()[0]
+            .as_u64()
+            .unwrap(),
+        106000
+    );
+}
