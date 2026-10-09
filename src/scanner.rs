@@ -61,9 +61,18 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
     let mut candidates = Vec::new();
     let mut restricted_count = 0;
 
-    // If running as Administrator, proactively ensure directory and children are accessible
+    // Only attempt to unlock the root directory if we encounter access restriction on it
     if crate::permissions::is_elevated() {
-        crate::permissions::unlock_folder_permissions(dir);
+        let is_restricted = match fs_err::read_dir(dir) {
+            Ok(_) => false,
+            Err(e) => {
+                let err = e.to_string();
+                err.contains("os error 5") || err.contains("Access is denied")
+            }
+        };
+        if is_restricted {
+            crate::permissions::unlock_folder_permissions(dir);
+        }
     }
 
     if recursive {

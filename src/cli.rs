@@ -154,6 +154,14 @@ pub struct TargetArgs {
     /// Disable automatic migration of outdated Rose mod structure (.fantome/.zip archives).
     #[arg(long)]
     pub no_migrate: bool,
+
+    /// Force interactive pause prompt ("Press Enter to exit...") at the end.
+    #[arg(long)]
+    pub pause: bool,
+
+    /// Disable interactive pause prompt at the end.
+    #[arg(long)]
+    pub no_pause: bool,
 }
 
 #[derive(Args, Debug)]
@@ -229,6 +237,14 @@ pub struct RepairArgs {
     /// Permanently delete unrepairable and corrupted mods instead of quarantining them to .broken/.
     #[arg(long)]
     pub delete_unrepairable: bool,
+
+    /// Force interactive pause prompt ("Press Enter to exit...") at the end.
+    #[arg(long)]
+    pub pause: bool,
+
+    /// Disable interactive pause prompt at the end.
+    #[arg(long)]
+    pub no_pause: bool,
 }
 
 

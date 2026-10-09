@@ -18,6 +18,7 @@ mod formats;
 mod health;
 mod output;
 pub mod permissions;
+pub mod process;
 mod repair;
 mod replacement;
 pub mod rose;
@@ -118,9 +119,25 @@ fn main() -> ExitCode {
     let printer = Printer::new(cli.json, cli.verbose);
 
     // Determine if pause should be enabled
-    let should_pause = if cli.no_pause {
+    let pause_requested = cli.pause
+        || match &cli.command {
+            Some(Commands::Check(args)) => args.pause,
+            Some(Commands::Repair(args)) => args.pause,
+            Some(Commands::Auto(args)) => args.pause,
+            _ => false,
+        };
+
+    let no_pause_requested = cli.no_pause
+        || match &cli.command {
+            Some(Commands::Check(args)) => args.no_pause,
+            Some(Commands::Repair(args)) => args.no_pause,
+            Some(Commands::Auto(args)) => args.no_pause,
+            _ => false,
+        };
+
+    let should_pause = if no_pause_requested {
         false
-    } else if cli.pause {
+    } else if pause_requested {
         true
     } else if let Some(p) = app_config.pause_on_exit {
         p

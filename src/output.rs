@@ -82,6 +82,27 @@ impl Printer {
         if let Some(d) = dir {
             println!("Directory: {}", d.display().to_string().white().bold());
         }
+
+        let running_procs = crate::process::detect_running_conflicting_processes();
+        if !running_procs.is_empty() {
+            println!();
+            println!(
+                "{} {}",
+                "[!] Warning:".yellow().bold(),
+                format!(
+                    "Detected running game/mod process(es): {}",
+                    running_procs.join(", ")
+                )
+                .white()
+                .bold()
+            );
+            println!(
+                "    {}",
+                "Please close League of Legends and Rose to avoid file lock conflicts."
+                    .yellow()
+            );
+        }
+
         println!();
     }
 

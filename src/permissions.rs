@@ -18,7 +18,43 @@ pub fn is_elevated() -> bool {
     false
 }
 
-/// Automatically unlock NTFS permissions on a directory.
+#[cfg(windows)]
+fn run_command_with_timeout(
+    mut cmd: std::process::Command,
+    timeout: std::time::Duration,
+) -> bool {
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    tracing::warn!("Permission unlock command timed out after {:?}", timeout);
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
+}
+
+/// Automatically unlock NTFS permissions on a directory or file.
 ///
 /// Takes ownership and grants Full Control to BUILTIN\Users and Administrators,
 /// resetting inherited permissions so that restricted folders extracted by Rose
@@ -32,39 +68,37 @@ pub fn unlock_folder_permissions(folder: &Path) -> bool {
             folder_str
         );
 
-        // Step 1: Take ownership recursively
-        let takeown_res = std::process::Command::new("takeown")
-            .args(["/F", &folder_str, "/R", "/D", "Y"])
-            .output();
+        let timeout = std::time::Duration::from_secs(5);
+        let is_dir = folder.is_dir();
+
+        // Step 1: Take ownership
+        let mut takeown_cmd = std::process::Command::new("takeown");
+        takeown_cmd.arg("/F").arg(&*folder_str);
+        if is_dir {
+            takeown_cmd.args(["/R", "/D", "Y"]);
+        }
+        let takeown_ok = run_command_with_timeout(takeown_cmd, timeout);
 
         // Step 2: Grant BUILTIN\Users (*S-1-5-32-545) and Administrators (*S-1-5-32-544) Full Control
-        let icacls_grant = std::process::Command::new("icacls")
-            .args([
-                &folder_str,
-                "/grant",
-                "*S-1-5-32-545:(OI)(CI)F",
-                "/T",
-                "/C",
-                "/Q",
-            ])
-            .output();
+        let mut icacls_cmd = std::process::Command::new("icacls");
+        icacls_cmd.arg(&*folder_str);
+        icacls_cmd.args(["/grant", "*S-1-5-32-545:(OI)(CI)F"]);
+        if is_dir {
+            icacls_cmd.args(["/T", "/C", "/Q"]);
+        } else {
+            icacls_cmd.args(["/C", "/Q"]);
+        }
+        let grant_ok = run_command_with_timeout(icacls_cmd, timeout);
 
         // Step 3: Reset inheritance
-        let _icacls_reset = std::process::Command::new("icacls")
-            .args([&folder_str, "/reset", "/T", "/C", "/Q"])
-            .output();
-
-        let takeown_ok = matches!(takeown_res, Ok(ref o) if o.status.success());
-        let grant_ok = match &icacls_grant {
-            Ok(o) => {
-                let out = String::from_utf8_lossy(&o.stdout);
-                let err = String::from_utf8_lossy(&o.stderr);
-                o.status.success()
-                    && !out.contains("Failed processing")
-                    && !err.contains("Access is denied")
-            }
-            Err(_) => false,
-        };
+        let mut reset_cmd = std::process::Command::new("icacls");
+        reset_cmd.arg(&*folder_str);
+        if is_dir {
+            reset_cmd.args(["/reset", "/T", "/C", "/Q"]);
+        } else {
+            reset_cmd.args(["/reset", "/C", "/Q"]);
+        }
+        let _ = run_command_with_timeout(reset_cmd, timeout);
 
         let ok = takeown_ok || grant_ok;
 

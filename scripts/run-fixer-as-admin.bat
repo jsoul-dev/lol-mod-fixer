@@ -46,6 +46,13 @@ if exist "%~dp0lol-mod-fixer-static.exe" (
 
 if defined EXE (
     "%EXE%" repair --pause %*
+    if errorlevel 1 (
+        echo.
+        echo ======================================================================
+        echo  lol-mod-fixer finished with an error or warning code.
+        echo ======================================================================
+        pause
+    )
 ) else (
     echo Error: Could not find lol-mod-fixer-static.exe or lol-mod-fixer.exe in:
     echo   "%~dp0"

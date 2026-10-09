@@ -1311,5 +1311,50 @@ fn test_quarantine_unrepairable_and_update_manifests() {
     assert_eq!(rescan[0], healthy_mod);
 }
 
+#[test]
+fn test_cli_subcommands_accept_pause_flags() {
+    use clap::Parser;
+    use crate::cli::{Cli, Commands};
+
+    // Test repair --pause
+    let args1 = ["lol-mod-fixer", "repair", "--pause"];
+    let cli1 = Cli::try_parse_from(args1).expect("repair --pause should be valid");
+    match cli1.command {
+        Some(Commands::Repair(args)) => assert!(args.pause),
+        _ => panic!("Expected Commands::Repair"),
+    }
+
+    // Test check --pause
+    let args2 = ["lol-mod-fixer", "check", "--pause"];
+    let cli2 = Cli::try_parse_from(args2).expect("check --pause should be valid");
+    match cli2.command {
+        Some(Commands::Check(args)) => assert!(args.pause),
+        _ => panic!("Expected Commands::Check"),
+    }
+
+    // Test auto --pause
+    let args3 = ["lol-mod-fixer", "auto", "--pause"];
+    let cli3 = Cli::try_parse_from(args3).expect("auto --pause should be valid");
+    match cli3.command {
+        Some(Commands::Auto(args)) => assert!(args.pause),
+        _ => panic!("Expected Commands::Auto"),
+    }
+
+    // Test repair --no-pause
+    let args4 = ["lol-mod-fixer", "repair", "--no-pause"];
+    let cli4 = Cli::try_parse_from(args4).expect("repair --no-pause should be valid");
+    match cli4.command {
+        Some(Commands::Repair(args)) => assert!(args.no_pause),
+        _ => panic!("Expected Commands::Repair"),
+    }
+}
+
+#[test]
+fn test_process_detection_does_not_panic() {
+    let procs = crate::process::detect_running_conflicting_processes();
+    println!("Detected running processes in test: {:?}", procs);
+}
+
+
 
 
