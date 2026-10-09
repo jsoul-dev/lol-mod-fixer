@@ -39,6 +39,11 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - Cross-references numeric skin folder IDs (e.g. `106000`, `33000`) with champion names (`Volibear`, `Rammus`), skin names, and lists all installed mods.
   - Automatically synchronizes when folders are deleted or newly imported.
   - Can be disabled at any time with `--no-mapping`.
+- **Automatic Quarantine of Corrupted & Unrepairable Mods (ON by Default)**:
+  - When a mod archive or folder cannot be repaired (e.g. CRC checksum corruption, missing files, or unresolvable rule errors), it is safely moved into a hidden `.broken/` quarantine folder.
+  - Automatically updates `rose_mod_targets.json` and skin mappings (`skin_mappings.txt` and `.json`) to remove all references to broken mods, ensuring your skin directories contain **only healthy, working mods**.
+  - Prevents game crashes and accidental loading in Rose without permanently destroying your files.
+  - Can be left in-place with `--no-quarantine` or permanently deleted with `--delete-unrepairable`.
 - **Embedded Offline League Champion & Skin Database**:
   - Bundles 9,303 official skin IDs from `Alban1911/LeagueSkins`.
   - Accurately identifies champions using parent folder Skin IDs (`106000` → Volibear, `33000` → Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
@@ -244,6 +249,8 @@ lol-mod-fixer config set-pause false
 | `--no-cleanup` | Disable automatic cleanup of empty folders and orphan Rose manifests. |
 | `--no-mapping` | Disable automatic generation of skin folder ID mappings (`skin_mappings.txt` and `.json`). |
 | `--no-migrate` | Disable automatic migration of outdated Rose mod structures (.fantome/.zip archives). |
+| `--no-quarantine` | Disable automatic quarantine of unrepairable and corrupted mods to `.broken/` folder. |
+| `--delete-unrepairable` | Permanently delete unrepairable and corrupted mods instead of quarantining them to `.broken/`. |
 | `--elevate` | Request Administrator elevation via UAC to unlock restricted mod folders. |
 | `--pause` | Force interactive pause prompt (`Press Enter to exit...`) at the end. |
 | `--no-pause` | Disable interactive pause prompt at the end (useful for scripts/CI). |
