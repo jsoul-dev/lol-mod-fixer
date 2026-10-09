@@ -16,6 +16,10 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use camino::Utf8PathBuf;
+use ltk_mod_project::fantome::FantomeFormat;
+use ltk_mod_project::modpkg::ModpkgImporter;
+use ltk_mod_project::{ProjectImporter, ProjectPacker};
 use zip::ZipArchive;
 
 use crate::error::{FixerError, FixerResult};
@@ -70,6 +74,7 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
                             if sub_name == ROSE_MOD_TARGETS
                                 || sub_name.ends_with(".fantome")
                                 || sub_name.ends_with(".zip")
+                                || sub_name.ends_with(".modpkg")
                             {
                                 return true;
                             }
@@ -85,7 +90,7 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
 
 /// Safely extract a zip or fantome archive into destination.
 /// Prevents zip-slip path traversal attacks.
-pub fn safe_extract_archive(archive_path: &Path, destination: &Path) -> FixerResult<()> {
+pub fn safe_extract_zip(archive_path: &Path, destination: &Path) -> FixerResult<()> {
     let file = fs_err::File::open(archive_path)?;
     let mut archive = ZipArchive::new(file).map_err(|e| {
         FixerError::Archive(format!(
@@ -124,6 +129,50 @@ pub fn safe_extract_archive(archive_path: &Path, destination: &Path) -> FixerRes
     }
 
     Ok(())
+}
+
+/// Safely extract a .modpkg archive into destination.
+///
+/// Uses LTK's native ModpkgImporter and ProjectPacker to convert the .modpkg
+/// binary package into the extracted Rose layout (META/info.json, WAD/, etc.).
+pub fn extract_modpkg_archive(modpkg_path: &Path, destination: &Path) -> FixerResult<()> {
+    let temp_dir = tempfile::TempDir::new()?;
+    let project_dir = temp_dir.path().join("project");
+    fs_err::create_dir_all(&project_dir)?;
+
+    let project_utf8: Utf8PathBuf = project_dir
+        .try_into()
+        .map_err(|_| FixerError::Archive("Project path is not valid UTF-8".to_string()))?;
+
+    let file = fs_err::File::open(modpkg_path)?;
+    ProjectImporter::new(&project_utf8)
+        .import(ModpkgImporter::new(file))
+        .map_err(|e| FixerError::Archive(format!("Modpkg import failed: {e}")))?;
+
+    let temp_fantome = temp_dir.path().join("converted.fantome");
+    let output_file = fs_err::File::create(&temp_fantome)?;
+    ProjectPacker::from_dir(&project_utf8)
+        .map_err(|e| FixerError::Archive(format!("Project packer failed: {e}")))?
+        .pack(FantomeFormat::new(output_file))
+        .map_err(|e| FixerError::Archive(format!("Fantome pack failed: {e}")))?;
+
+    safe_extract_zip(&temp_fantome, destination)?;
+    Ok(())
+}
+
+/// Safely extract a mod archive (.fantome, .zip, or .modpkg) into destination.
+pub fn safe_extract_archive(archive_path: &Path, destination: &Path) -> FixerResult<()> {
+    let lower = archive_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    if lower.ends_with(".modpkg") {
+        extract_modpkg_archive(archive_path, destination)
+    } else {
+        safe_extract_zip(archive_path, destination)
+    }
 }
 
 /// Flatten single-root wrapper directories if an archive was zipped with an extra parent folder.
@@ -343,7 +392,7 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
             None => continue,
         };
 
-        // Find raw archives (.fantome and .zip) directly in the numeric target folder
+        // Find raw archives (.fantome, .zip, and .modpkg) directly in the numeric target folder
         let mut archives: Vec<PathBuf> = Vec::new();
         if let Ok(entries) = fs_err::read_dir(&target_dir) {
             for entry in entries.filter_map(|e| e.ok()) {
@@ -354,7 +403,10 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
                         .unwrap_or_default()
                         .to_string_lossy()
                         .to_ascii_lowercase();
-                    if lower.ends_with(".fantome") || lower.ends_with(".zip") {
+                    if lower.ends_with(".fantome")
+                        || lower.ends_with(".zip")
+                        || lower.ends_with(".modpkg")
+                    {
                         archives.push(p);
                     }
                 }

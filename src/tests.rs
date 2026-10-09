@@ -1064,5 +1064,51 @@ fn test_migrate_outdated_rose_directory() {
     assert_eq!(report2.extracted_archives, 0);
 }
 
+#[test]
+fn test_modpkg_migration_and_extraction() {
+    let modpkg_source = std::path::Path::new(
+        r"C:\Users\Admin\Downloads\Scripts\Modpkg-to-Fantome\Escanor Nasus.modpkg",
+    );
+    if !modpkg_source.is_file() {
+        // Skip on environments without the fixture
+        return;
+    }
+
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path().join("skins");
+    let target_75000 = skins_dir.join("75000");
+    fs_err::create_dir_all(&target_75000).unwrap();
+
+    let modpkg_dest = target_75000.join("Escanor Nasus.modpkg");
+    fs_err::copy(modpkg_source, &modpkg_dest).unwrap();
+
+    // Verify detection
+    assert!(crate::migrate::is_rose_skins_directory(&skins_dir));
+
+    // Migrate
+    let report = crate::migrate::migrate_outdated_rose_directory(&skins_dir).unwrap();
+    assert_eq!(report.extracted_archives, 1);
+    assert_eq!(report.manifests_rebuilt, 1);
+
+    // Verify .modpkg is deleted
+    assert!(!modpkg_dest.exists(), "Original .modpkg file must be unlinked");
+
+    // Verify extracted structure
+    let extracted = target_75000.join("Escanor Nasus");
+    assert!(extracted.is_dir());
+    assert!(extracted.join("META").join("info.json").exists());
+    assert!(extracted.join("WAD").exists());
+
+    // Verify manifest
+    let manifest_path = target_75000.join("rose_mod_targets.json");
+    assert!(manifest_path.exists());
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["championId"], 75);
+    assert_eq!(manifest["targets"], serde_json::json!([75000]));
+    let mods = manifest["mods"].as_object().unwrap();
+    assert_eq!(mods.len(), 1);
+}
+
 
 

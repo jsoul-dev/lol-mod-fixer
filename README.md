@@ -38,7 +38,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - Bundles 9,303 official skin IDs from `Alban1911/LeagueSkins`.
   - Accurately identifies champions using parent folder Skin IDs (`106000` $\rightarrow$ Volibear, `33000` $\rightarrow$ Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
 - **Rose Mod Manager Integration**:
-  - **Legacy Structure Auto-Migration (ON by Default)**: Automatically detects outdated Rose structures where `.fantome` or `.zip` archives were placed directly inside numeric skin target folders without being extracted. Safely extracts archives, flattens redundant wrapper folders, validates files, unlinks original archives, and builds `rose_mod_targets.json` with exact `folderHash` and `wadHashes` so mods inject properly in Rose client and Party Mode. Already updated structures are left completely untouched. (Disable with `--no-migrate`).
+  - **Legacy & Raw Archive Auto-Migration (ON by Default)**: Automatically detects outdated or raw archives (`.fantome`, `.zip`, and `.modpkg`) placed directly inside numeric skin target folders without being extracted. Safely extracts archives (converting `.modpkg` binary packages via LTK project unpacking into clean Rose layout), flattens redundant wrapper folders, validates files, unlinks original archives, and builds `rose_mod_targets.json` with exact `folderHash` and `wadHashes` so mods inject properly in Rose client and Party Mode. Already updated structures are left completely untouched. (Disable with `--no-migrate`).
   - **Extracted Mod Folder Support**: Directly supports `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` structures.
   - **Manifest Synchronization**: Automatically updates Rose's `rose_mod_targets.json` with the newly repaired `folderHash` and `wadHashes` using Rose's exact hashing algorithm, preserving target skin IDs and display names.
   - **Automatic NTFS Permissions Unlocking**: Detects restricted/hooked Rose folders (`os error 5: Access is denied`) and automatically resets NTFS access control lists (ACLs) when elevated.
@@ -200,7 +200,7 @@ lol-mod-fixer config set-pause false
 |---|---|---|---|---|
 | **Fantome Archive** | `.fantome`, `.zip` | ✅ Yes | ✅ Yes | Full support via `ltk-manager-library` and `ltk_fantome`. Outdated BIN property types, outdated references, and audio bank IDs are detected and repaired. |
 | **Fantome Folder** | `<dir>/META/info.json`<br>`<dir>/WAD/*.wad.client` | ✅ Yes | ✅ Yes | Direct support for extracted mods and Rose directories. Inspected, repaired, and beautified in-place with atomic rollback safety and `rose_mod_targets.json` synchronization. |
-| **ModPkg** | `.modpkg` | ✅ Detected | ❌ Unrepairable | By design in LTK Manager, `.modpkg` is read straight out of its archive without an unpacked representation. Converting/repairing `.modpkg` is not supported upstream. |
+| **ModPkg** | `.modpkg` | ✅ Detected / Auto-Migrated | ✅ Repaired upon extraction | Standalone `.modpkg` is an immutable package in LTK Manager. However, `lol-mod-fixer`'s migration engine automatically converts raw `.modpkg` archives into clean Rose extracted layouts (`META/` + `WAD/`), repairing and hashing them in the process. |
 | **Client WAD** | `.wad.client`, `.wad` | ✅ Detected | ❌ Unsupported | Standalone WAD archives contain only 64-bit xxHash hashes in their table of contents. Custom author filenames cannot be recovered without mod project metadata. |
 
 ---
