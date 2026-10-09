@@ -39,13 +39,19 @@ pub struct MigrationReport {
     pub manifests_rebuilt: usize,
     /// Number of archives skipped (e.g. already extracted).
     pub skipped_archives: usize,
-    /// Number of archives that failed extraction.
-    pub failed_archives: usize,
+    /// Archives that failed extraction: (filename, clean reason).
+    pub failed_archives: Vec<(String, String)>,
 }
 
 impl MigrationReport {
     pub fn is_empty(&self) -> bool {
-        self.extracted_archives == 0 && self.manifests_rebuilt == 0 && self.failed_archives == 0
+        self.extracted_archives == 0
+            && self.manifests_rebuilt == 0
+            && self.failed_archives.is_empty()
+    }
+
+    pub fn failed_count(&self) -> usize {
+        self.failed_archives.len()
     }
 }
 
@@ -459,17 +465,31 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
                     } else {
                         // Empty or invalid extraction: cleanup incomplete destination, preserve original
                         let _ = fs_err::remove_dir_all(&destination);
-                        tracing::warn!(
-                            "Extraction produced no usable files for {}",
-                            archive.display()
-                        );
-                        report.failed_archives += 1;
+                        let file_name = archive
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
+                        report.failed_archives.push((
+                            file_name,
+                            "Extraction produced no usable mod files".to_string(),
+                        ));
                     }
                 }
                 Err(e) => {
                     let _ = fs_err::remove_dir_all(&destination);
-                    tracing::warn!("Failed to extract archive {}: {e}", archive.display());
-                    report.failed_archives += 1;
+                    let err_str = e.to_string();
+                    let clean_err = if err_str.contains("Invalid checksum") {
+                        "Corrupted archive (Invalid checksum)".to_string()
+                    } else {
+                        err_str
+                    };
+                    let file_name = archive
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    report.failed_archives.push((file_name, clean_err));
                 }
             }
         }

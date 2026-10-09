@@ -137,11 +137,40 @@ pub fn check_mod_health(path: &Path, config: &LtkConfig) -> FixerResult<HealthRe
     }
 }
 
+/// Validate that a zip archive can be opened and all its entries read without CRC/I/O corruption.
+pub fn verify_archive_integrity(path: &Path) -> Result<(), String> {
+    let file = fs_err::File::open(path).map_err(|e| format!("Could not open file: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid zip archive: {e}"))?;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| format!("Corrupted entry #{i}: {e}"))?;
+        let mut sink = std::io::sink();
+        if let Err(e) = std::io::copy(&mut entry, &mut sink) {
+            return Err(format!("Corrupted entry '{}': {e}", entry.name()));
+        }
+    }
+    Ok(())
+}
+
 fn check_fantome_health(
     path: &Path,
     file_name: String,
     config: &LtkConfig,
 ) -> FixerResult<HealthReport> {
+    // First, verify archive integrity (detect corrupt entries and invalid CRC checksums)
+    if let Err(err) = verify_archive_integrity(path) {
+        return Ok(HealthReport {
+            path: path.to_path_buf(),
+            file_name,
+            format: ModFormat::Fantome,
+            status: ModHealthStatus::Broken,
+            problem_count: 0,
+            repairable_count: 0,
+            unrepairable_count: 0,
+            problems: Vec::new(),
+            reason: Some(format!("Corrupted archive ({err})")),
+        });
+    }
+
     // Resolver for WAD chunks
     let resolver_state = WadPathResolverState::default();
     let resolver = resolver_state.get();

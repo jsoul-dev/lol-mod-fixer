@@ -95,7 +95,7 @@ fn main() -> ExitCode {
     let log_level = if cli.verbose {
         "debug"
     } else {
-        "warn"
+        "off"
     };
 
     let env_filter =
@@ -103,6 +103,8 @@ fn main() -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_writer(std::io::stderr) // Logs go to stderr so stdout remains clean JSON
+        .without_time()
+        .with_target(false)
         .with_ansi(false) // Disable raw ANSI escape sequences for clean Windows console output
         .init();
 
@@ -154,6 +156,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
     let cleanup = !cli.no_cleanup;
     let mapping = !cli.no_mapping;
     let migrate = !cli.no_migrate;
+    let delete_unrepairable = !cli.no_delete_unrepairable;
 
     match cli.command {
         Some(Commands::Check(args)) => {
@@ -176,6 +179,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let c = if args.no_cleanup { false } else { cleanup };
             let m = if args.no_mapping { false } else { mapping };
             let mig = if args.no_migrate { false } else { migrate };
+            let del = if args.no_delete_unrepairable { false } else { delete_unrepairable };
             execute_repair(
                 input,
                 output,
@@ -187,6 +191,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 c,
                 m,
                 mig,
+                del,
                 &repair_printer,
             )
         }
@@ -202,6 +207,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let c = if args.no_cleanup { false } else { cleanup };
             let m = if args.no_mapping { false } else { mapping };
             let mig = if args.no_migrate { false } else { migrate };
+            let del = if args.no_delete_unrepairable { false } else { delete_unrepairable };
             execute_repair(
                 input,
                 output,
@@ -213,6 +219,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 c,
                 m,
                 mig,
+                del,
                 &repair_printer,
             )
         }
@@ -229,7 +236,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let dry_run = cli.dry_run;
             let recursive = true;
             execute_repair(
-                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, migrate, printer,
+                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, migrate, delete_unrepairable, printer,
             )
         }
     }

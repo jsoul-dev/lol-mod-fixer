@@ -35,6 +35,8 @@ pub enum RepairResult {
         path: PathBuf,
         format: ModFormat,
         reason: String,
+        #[serde(default)]
+        deleted: bool,
     },
     /// Format is not supported for repair (e.g. standalone .wad.client).
     Unsupported {
@@ -47,6 +49,8 @@ pub enum RepairResult {
         path: PathBuf,
         format: ModFormat,
         error: String,
+        #[serde(default)]
+        deleted: bool,
     },
 }
 
@@ -93,6 +97,7 @@ pub fn repair_mod_archive(
                 reason: "A .modpkg is read straight out of its archive and has no unpacked form. \
                          LTK Manager does not support modifying or repairing .modpkg archives."
                     .to_string(),
+                deleted: false,
             }),
             ModFormat::WadClient => Ok(RepairResult::Unsupported {
                 path: input.to_path_buf(),
@@ -127,6 +132,7 @@ pub fn repair_mod_archive(
                 reason: initial_health.reason.unwrap_or_else(|| {
                     "Detected problems cannot be repaired automatically.".to_string()
                 }),
+                deleted: false,
             });
         }
         ModHealthStatus::Broken => {
@@ -136,6 +142,7 @@ pub fn repair_mod_archive(
                 error: initial_health
                     .reason
                     .unwrap_or_else(|| "Archive is corrupted or unreadable.".to_string()),
+                deleted: false,
             });
         }
         ModHealthStatus::Unsupported => {
@@ -152,6 +159,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: "Hashtable cache or game metadata unavailable.".to_string(),
+                deleted: false,
             });
         }
         ModHealthStatus::Repairable => {}
@@ -210,6 +218,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("Failed to read extracted mod folder: {e}"),
+                deleted: false,
             });
         }
         temp_archive
@@ -225,6 +234,7 @@ pub fn repair_mod_archive(
                     path: input.to_path_buf(),
                     format,
                     error: format!("Failed to import mod into temporary library: {e}"),
+                    deleted: false,
                 });
             }
         };
@@ -237,6 +247,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("LTK repair engine error: {e}"),
+                deleted: false,
             });
         }
     };
@@ -260,6 +271,7 @@ pub fn repair_mod_archive(
             path: input.to_path_buf(),
             format,
             error: format!("Exporting repaired mod failed: {e}"),
+            deleted: false,
         });
     }
 
@@ -282,6 +294,7 @@ pub fn repair_mod_archive(
                 "Verification failed: repaired archive is invalid ({})",
                 post_health.reason.as_deref().unwrap_or("unknown error")
             ),
+            deleted: false,
         });
     }
 
@@ -301,6 +314,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("Failed to unpack repaired archive: {e}"),
+                deleted: false,
             });
         }
         if let Err(e) = replace_folder_safely(target_dest, &temp_unpacked, backup) {
@@ -308,6 +322,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("Failed to save repaired folder: {e}"),
+                deleted: false,
             });
         }
 
@@ -320,6 +335,7 @@ pub fn repair_mod_archive(
             path: input.to_path_buf(),
             format,
             error: format!("Failed to save repaired file: {e}"),
+            deleted: false,
         });
     }
 

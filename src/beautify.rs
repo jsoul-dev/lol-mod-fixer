@@ -85,12 +85,68 @@ pub fn extract_folder_version(name: &str) -> (String, Option<String>) {
     (name.trim().to_string(), None)
 }
 
+/// Check if a token is a known acronym that should remain in all-caps.
+fn is_known_acronym(token: &str) -> bool {
+    const KNOWN_ACRONYMS: &[&str] = &[
+        "SAO", "KDA", "2B", "T1", "EDG", "FPX", "IG", "SKT", "SSG", "DWG", "DRX",
+        "BLG", "RNG", "GEN", "G2", "FNC", "C9", "TL", "TSM", "JDG", "LNG", "TES",
+        "WBG", "OMG", "WE", "V5", "AL", "UP", "LGD", "NIP", "RA", "TT", "LCK",
+        "LPL", "LCS", "LEC", "PCS", "VCS", "CBLOL", "LJL", "LLA", "RGB", "HD",
+        "SFX", "VFX", "UI", "HUD", "DJ", "OG", "RPG", "NPC", "PvP", "PvE",
+    ];
+    KNOWN_ACRONYMS.iter().any(|&a| a.eq_ignore_ascii_case(token))
+}
+
+/// Check if a string looks like a raw generated UUID or hash string (e.g. 8-4-4-4-12 hex).
+pub fn is_uuid_like(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() >= 36 {
+        for i in 0..=bytes.len() - 36 {
+            let window = &bytes[i..i + 36];
+            if window[8] == b'-'
+                && window[13] == b'-'
+                && window[18] == b'-'
+                && window[23] == b'-'
+                && window[0..8].iter().all(|b| b.is_ascii_hexdigit())
+                && window[9..13].iter().all(|b| b.is_ascii_hexdigit())
+                && window[14..18].iter().all(|b| b.is_ascii_hexdigit())
+                && window[19..23].iter().all(|b| b.is_ascii_hexdigit())
+                && window[24..36].iter().all(|b| b.is_ascii_hexdigit())
+            {
+                return true;
+            }
+        }
+    }
+
+    let hex_only = s.chars().filter(|c| c.is_ascii_hexdigit()).count();
+    let total_alphanumeric = s.chars().filter(|c| c.is_alphanumeric()).count();
+    if total_alphanumeric >= 30 && hex_only >= 30 && hex_only == total_alphanumeric {
+        return true;
+    }
+
+    let parts: Vec<&str> = s
+        .split(|c: char| c == '-' || c == '_' || c == ' ')
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.len() >= 5
+        && parts[0].len() == 8
+        && parts[1].len() == 4
+        && parts[2].len() == 4
+        && parts[3].len() == 4
+        && parts[4].len() == 12
+        && parts[0..5].iter().all(|p| p.chars().all(|c| c.is_ascii_hexdigit()))
+    {
+        return true;
+    }
+
+    false
+}
+
 /// Capitalize a token cleanly into Title Case.
 fn title_case(token: &str) -> String {
     let lower = token.to_ascii_lowercase();
     // Words to lowercase in titles unless at start
     if lower == "the" || lower == "of" || lower == "and" {
-        // We'll capitalize them for clean folder display (e.g. "Shadow The Hedgehog")
         return format!(
             "{}{}",
             token[..1].to_ascii_uppercase(),
@@ -98,20 +154,41 @@ fn title_case(token: &str) -> String {
         );
     }
 
-    // If already has uppercase (e.g. "Chun", "Li", "Ekko", "Zacian", "Eto"), keep existing casing
-    if token.chars().any(|c| c.is_uppercase()) {
-        return token.to_string();
+    // Known acronyms (e.g. SAO, KDA, 2B, T1)
+    if is_known_acronym(token) {
+        return token.to_ascii_uppercase();
     }
 
-    // Otherwise capitalize first letter
-    let mut chars = token.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+    // Short all-caps alphanumeric tokens (<= 3 chars, e.g. "SAO", "2B", "MF")
+    let is_all_uppercase = token.chars().all(|c| !c.is_alphabetic() || c.is_uppercase());
+    if is_all_uppercase && token.len() <= 3 && token.chars().any(|c| c.is_alphabetic()) {
+        return token.to_ascii_uppercase();
+    }
+
+    // If all uppercase and length > 3 (e.g. "SINON", "PROJECT", "DRAGON"), convert to Title Case
+    if is_all_uppercase {
+        let mut chars = token.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => {
+                first.to_uppercase().collect::<String>()
+                    + chars.as_str().to_ascii_lowercase().as_str()
+            }
+        }
+    } else if token.chars().any(|c| c.is_uppercase()) {
+        // Mixed casing like "McQueen" or "Chun" or "Li" -> preserve
+        token.to_string()
+    } else {
+        // All lowercase -> capitalize first letter
+        let mut chars = token.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        }
     }
 }
 
-/// Clean and extract the Skin Name tokens, stripping out champion name and version/branch artifacts.
+/// Clean and extract the Skin Name tokens, stripping out champion name, aliases, and version/branch artifacts.
 pub fn clean_skin_name(raw_name: &str, champion: Option<&str>) -> String {
     // Split on delimiters like '_', '-', whitespace, parentheses, brackets
     let tokens: Vec<&str> = raw_name
@@ -119,32 +196,35 @@ pub fn clean_skin_name(raw_name: &str, champion: Option<&str>) -> String {
         .filter(|t| !t.is_empty())
         .collect();
 
-    // Prepare champion tokens to filter out
-    let champ_tokens: Vec<String> = champion
-        .map(|c| {
-            c.split(|ch: char| !ch.is_alphanumeric())
-                .filter(|t| !t.is_empty())
-                .map(|t| t.to_ascii_lowercase())
-                .collect()
-        })
+    // Prepare champion tokens and aliases to filter out
+    let champ_aliases: Vec<String> = champion
+        .map(|c| crate::champions::champion_alias_tokens(c))
         .unwrap_or_default();
 
     let mut filtered = Vec::new();
     for token in tokens {
-        let t_lower = token.to_ascii_lowercase();
+        let t_norm: String = token
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_ascii_lowercase();
+
+        if t_norm.is_empty() {
+            continue;
+        }
 
         // Skip artifact words
-        if t_lower == "main"
-            || t_lower == "master"
-            || t_lower == "repath"
-            || t_lower == "fixed"
-            || t_lower == "mod"
+        if t_norm == "main"
+            || t_norm == "master" && champion != Some("Master Yi")
+            || t_norm == "repath"
+            || t_norm == "fixed"
+            || t_norm == "mod"
         {
             continue;
         }
 
         // Skip version-like tokens (e.g. "v1.0", "1.0", "v1.1.2", "2.0")
-        let trimmed_v = t_lower.trim_start_matches('v');
+        let trimmed_v = t_norm.trim_start_matches('v');
         if !trimmed_v.is_empty()
             && trimmed_v.chars().any(|c| c.is_ascii_digit())
             && trimmed_v.chars().all(|c| c.is_ascii_digit() || c == '.')
@@ -152,12 +232,28 @@ pub fn clean_skin_name(raw_name: &str, champion: Option<&str>) -> String {
             continue;
         }
 
-        // Skip champion name tokens
-        if champ_tokens.iter().any(|ct| ct == &t_lower) {
+        // Skip champion name and alias tokens (e.g. "kaisa", "cait", "aphe", "leesin", "dr", "mundo")
+        if champ_aliases.iter().any(|ca| ca == &t_norm) {
             continue;
         }
 
-        filtered.push(title_case(token));
+        let clean_token = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'');
+        if clean_token.is_empty() {
+            continue;
+        }
+
+        let title_token = title_case(clean_token);
+
+        // Deduplicate adjacent identical words (e.g. "Guts Guts" -> "Guts")
+        if filtered
+            .last()
+            .map(|last: &String| last.eq_ignore_ascii_case(&title_token))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        filtered.push(title_token);
     }
 
     if filtered.is_empty() {
@@ -196,8 +292,22 @@ pub fn compute_beautified_title(
     };
     let version = normalize_version(raw_ver);
 
-    // 3. Clean skin name
-    let skin_name = clean_skin_name(&stripped_folder_name, champ_opt);
+    // 3. Clean skin name (if folder name is a raw UUID, use info.json Name if available)
+    let skin_name_source = if is_uuid_like(&stripped_folder_name) {
+        if let Some(info_n) = info_name {
+            if !is_uuid_like(info_n) && !info_n.trim().is_empty() {
+                info_n
+            } else {
+                "Custom"
+            }
+        } else {
+            "Custom"
+        }
+    } else {
+        &stripped_folder_name
+    };
+
+    let skin_name = clean_skin_name(skin_name_source, champ_opt);
 
     // 4. Assemble: <Skin Name> <Champion Name> <Version>
     match champ_opt {

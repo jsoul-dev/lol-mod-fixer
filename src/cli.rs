@@ -79,6 +79,10 @@ pub struct Cli {
     /// Disable automatic migration of outdated Rose mod structure (.fantome/.zip archives).
     #[arg(long)]
     pub no_migrate: bool,
+
+    /// Disable automatic deletion and cleaning of unrepairable and corrupted mods.
+    #[arg(long)]
+    pub no_delete_unrepairable: bool,
 }
 
 
@@ -205,6 +209,10 @@ pub struct RepairArgs {
     /// Disable automatic migration of outdated Rose mod structure (.fantome/.zip archives).
     #[arg(long)]
     pub no_migrate: bool,
+
+    /// Disable automatic deletion and cleaning of unrepairable and corrupted mods.
+    #[arg(long)]
+    pub no_delete_unrepairable: bool,
 }
 
 

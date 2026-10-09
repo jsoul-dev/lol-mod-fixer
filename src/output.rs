@@ -49,6 +49,8 @@ pub struct JsonRepairModItem {
     pub reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,6 +213,7 @@ impl Printer {
                 path,
                 format,
                 reason,
+                deleted,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
                 println!(
@@ -219,9 +222,15 @@ impl Printer {
                     name.white().bold()
                 );
                 println!("      Format: {}", format.display_name().dark_grey());
-                println!("      Status: {}", "UNREPAIRABLE".dark_red().bold());
-                println!("      Reason: {}", reason.as_str().yellow());
-                println!("      {}", "File left untouched.".dark_grey());
+                if *deleted {
+                    println!("      Status: {}", "UNREPAIRABLE (CLEANED)".red().bold());
+                    println!("      Reason: {}", reason.as_str().yellow());
+                    println!("      {}", "Deleted unrepairable mod to prevent game crashes.".red());
+                } else {
+                    println!("      Status: {}", "UNREPAIRABLE".dark_red().bold());
+                    println!("      Reason: {}", reason.as_str().yellow());
+                    println!("      {}", "File left untouched.".dark_grey());
+                }
             }
             RepairResult::Unsupported {
                 path,
@@ -243,6 +252,7 @@ impl Printer {
                 path,
                 format,
                 error,
+                deleted,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
                 println!(
@@ -251,9 +261,15 @@ impl Printer {
                     name.white().bold()
                 );
                 println!("      Format: {}", format.display_name().dark_grey());
-                println!("      Status: {}", "REPAIR FAILED".red().bold());
-                println!("      Reason: {}", error.as_str().red());
-                println!("      {}", "File left untouched.".dark_grey());
+                if *deleted {
+                    println!("      Status: {}", "CORRUPTED / FAILED (CLEANED)".red().bold());
+                    println!("      Reason: {}", error.as_str().red());
+                    println!("      {}", "Deleted broken/corrupted file to prevent game crashes.".red());
+                } else {
+                    println!("      Status: {}", "REPAIR FAILED".red().bold());
+                    println!("      Reason: {}", error.as_str().red());
+                    println!("      {}", "File left untouched.".dark_grey());
+                }
             }
         }
         println!();
@@ -369,6 +385,7 @@ impl Printer {
                         fixes_applied: Some(0),
                         reason: None,
                         error: None,
+                        deleted: None,
                     },
                     RepairResult::Repaired {
                         path,
@@ -385,20 +402,23 @@ impl Printer {
                         fixes_applied: Some(*fixes_applied),
                         reason: None,
                         error: None,
+                        deleted: None,
                     },
                     RepairResult::Unrepairable {
                         path,
                         format,
                         reason,
+                        deleted,
                     } => JsonRepairModItem {
                         path: path.display().to_string(),
                         format: *format,
                         status: "unrepairable".to_string(),
-                        modified: false,
+                        modified: *deleted,
                         output_path: None,
                         fixes_applied: None,
                         reason: Some(reason.clone()),
                         error: None,
+                        deleted: if *deleted { Some(true) } else { None },
                     },
                     RepairResult::Unsupported {
                         path,
@@ -413,20 +433,23 @@ impl Printer {
                         fixes_applied: None,
                         reason: Some(reason.clone()),
                         error: None,
+                        deleted: None,
                     },
                     RepairResult::Failed {
                         path,
                         format,
                         error,
+                        deleted,
                     } => JsonRepairModItem {
                         path: path.display().to_string(),
                         format: *format,
                         status: "failed".to_string(),
-                        modified: false,
+                        modified: *deleted,
                         output_path: None,
                         fixes_applied: None,
                         reason: None,
                         error: Some(error.clone()),
+                        deleted: if *deleted { Some(true) } else { None },
                     },
                 })
                 .collect();
@@ -451,6 +474,21 @@ impl Printer {
             return;
         }
 
+        let unrepairable_cleaned = results
+            .iter()
+            .filter(|r| match r {
+                RepairResult::Unrepairable { deleted, .. } => *deleted,
+                _ => false,
+            })
+            .count();
+        let failed_cleaned = results
+            .iter()
+            .filter(|r| match r {
+                RepairResult::Failed { deleted, .. } => *deleted,
+                _ => false,
+            })
+            .count();
+
         println!("{}", "--------------------------------".dark_cyan());
         println!("{}", "Scan & Repair complete\n".white().bold());
         println!("Mods scanned:       {}", scanned.to_string().white().bold());
@@ -471,19 +509,29 @@ impl Printer {
             }
         );
         println!(
-            "Unrepairable:       {}",
+            "Unrepairable:       {}{}",
             if unrepairable > 0 {
                 unrepairable.to_string().dark_red().bold()
             } else {
                 unrepairable.to_string().dark_grey()
+            },
+            if unrepairable_cleaned > 0 {
+                format!(" ({} cleaned)", unrepairable_cleaned).red().to_string()
+            } else {
+                String::new()
             }
         );
         println!(
-            "Failed:             {}",
+            "Failed:             {}{}",
             if failed > 0 {
                 failed.to_string().red().bold()
             } else {
                 failed.to_string().dark_grey()
+            },
+            if failed_cleaned > 0 {
+                format!(" ({} cleaned)", failed_cleaned).red().to_string()
+            } else {
+                String::new()
             }
         );
         println!(
@@ -522,12 +570,20 @@ impl Printer {
                 report.skipped_archives.to_string().dark_grey()
             );
         }
-        if report.failed_archives > 0 {
+        if !report.failed_archives.is_empty() {
             println!(
                 "  {} {} archive(s) failed extraction",
                 "✗".red().bold(),
-                report.failed_archives.to_string().red().bold()
+                report.failed_archives.len().to_string().red().bold()
             );
+            for (name, reason) in &report.failed_archives {
+                println!(
+                    "    {} {}: {}",
+                    "•".dark_grey(),
+                    name.as_str().white().bold(),
+                    reason.as_str().yellow()
+                );
+            }
         }
         println!();
     }

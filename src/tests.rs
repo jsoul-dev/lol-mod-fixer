@@ -736,6 +736,48 @@ fn test_beautify_all_user_examples() {
     let res10_inferred = compute_beautified_title("Vi Deku", None, None, None, &[]);
     assert_eq!(res10_inferred, "Deku Vi v1.0");
 
+    // Example 11: Kai'Sa duplicate / apostrophe stripping
+    let res11 = compute_beautified_title("Zero Two Kaisa Kai'Sa", Some("145000"), None, None, &[]);
+    assert_eq!(res11, "Zero Two Kai'Sa v1.0");
+
+    // Example 12: Dr. Mundo with Dr. in skin name
+    let res12 = compute_beautified_title("Broly Dr. Dr. Mundo", Some("36000"), None, None, &[]);
+    assert_eq!(res12, "Broly Dr. Mundo v1.0");
+
+    // Example 13: Rek'Sai triple repetition
+    let res13 = compute_beautified_title("Warden Rek'Sai Rek'Sai Rek'Sai-1.4", Some("421000"), None, None, &[]);
+    assert_eq!(res13, "Warden Rek'Sai v1.4");
+
+    // Example 14: SAO SINON -> SAO Sinon Caitlyn v1.0 (acronym kept, word title-cased)
+    let res14 = compute_beautified_title("SAO SINON Caitlyn", Some("51000"), None, None, &[]);
+    assert_eq!(res14, "SAO Sinon Caitlyn v1.0");
+
+    // Example 15: Semi-dupe Caitlyn nickname (Cait)
+    let res15 = compute_beautified_title("Usopp Cait", Some("51000"), None, None, &[]);
+    assert_eq!(res15, "Usopp Caitlyn v1.0");
+
+    // Example 16: Semi-dupe Aphelios nickname (Aphe)
+    let res16 = compute_beautified_title("Angel Aphe", Some("523000"), None, None, &[]);
+    assert_eq!(res16, "Angel Aphelios v1.0");
+
+    // Example 17: Semi-dupe Lee Sin (Leesin)
+    let res17 = compute_beautified_title("Yuji Leesin", Some("64000"), None, None, &[]);
+    assert_eq!(res17, "Yuji Lee Sin v1.0");
+
+    // Example 18: Kog'Maw repetition
+    let res18 = compute_beautified_title("Demon Kog'Maw Kog'Maw-1.5", Some("96000"), None, None, &[]);
+    assert_eq!(res18, "Demon Kog'Maw v1.5");
+
+    // Example 19: UUID folder name with clean info.json name
+    let res19 = compute_beautified_title(
+        "B1554516-7fed-462d-Bd77-91da895aa3bd-ziggs",
+        Some("115000"),
+        Some("Mad Scientist"),
+        Some("1.0.0"),
+        &[],
+    );
+    assert_eq!(res19, "Mad Scientist Ziggs v1.0");
+
     // Idempotency: Running beautification on already-beautified titles MUST remain unchanged
     let all_beautified = [
         (&res1, "33000"),
@@ -748,6 +790,15 @@ fn test_beautify_all_user_examples() {
         (&res8, "120000"),
         (&res9, "245000"),
         (&res10, "254000"),
+        (&res11, "145000"),
+        (&res12, "36000"),
+        (&res13, "421000"),
+        (&res14, "51000"),
+        (&res15, "51000"),
+        (&res16, "523000"),
+        (&res17, "64000"),
+        (&res18, "96000"),
+        (&res19, "115000"),
     ];
     for (title, parent_id) in all_beautified {
         let idempotent = compute_beautified_title(title, Some(parent_id), None, None, &[]);
@@ -1108,6 +1159,82 @@ fn test_modpkg_migration_and_extraction() {
     assert_eq!(manifest["targets"], serde_json::json!([75000]));
     let mods = manifest["mods"].as_object().unwrap();
     assert_eq!(mods.len(), 1);
+}
+
+#[test]
+fn test_corrupted_archive_detected_as_broken() {
+    let temp = TempDir::new().unwrap();
+    let corrupt_file = temp.path().join("draven-shaco-thrower_1.0.0.fantome");
+
+    // Write invalid/corrupt zip content with broken entry
+    let mut bad_bytes = vec![0x50, 0x4B, 0x03, 0x04]; // PK\x03\x04
+    bad_bytes.extend_from_slice(&[0u8; 100]); // truncated/invalid header
+    fs_err::write(&corrupt_file, &bad_bytes).unwrap();
+
+    let config = dummy_config();
+    let report = check_mod_health(&corrupt_file, &config).unwrap();
+    assert_eq!(report.status, ModHealthStatus::Broken);
+    assert!(report.reason.is_some());
+}
+
+#[test]
+fn test_delete_unrepairable_and_update_manifests() {
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path().join("skins");
+    let target_dir = skins_dir.join("119000"); // Draven
+    fs_err::create_dir_all(&target_dir).unwrap();
+
+    // 1. Create a corrupted/broken archive
+    let corrupt_file = target_dir.join("draven-shaco-thrower_1.0.0.fantome");
+    fs_err::write(&corrupt_file, b"corrupted-non-zip-data").unwrap();
+
+    // 2. Create a healthy mod folder alongside it
+    let healthy_archive = temp.path().join("Gladiator Draven.fantome");
+    make_packed_bin_fantome_zip(
+        &healthy_archive,
+        "Gladiator Draven",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+    let healthy_mod = target_dir.join("Gladiator Draven v1.0");
+    crate::formats::unpack_fantome_archive(&healthy_archive, &healthy_mod).unwrap();
+
+    // Build initial Rose manifest
+    let _ = crate::migrate::rebuild_target_manifest(&target_dir, 119000).unwrap();
+    assert!(target_dir.join("rose_mod_targets.json").exists());
+
+    // Execute repair with delete_unrepairable: true
+    let printer = crate::output::Printer::new(false, false);
+    let _ = crate::engine::execute_repair(
+        Some(skins_dir.clone()),
+        None,
+        None,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true, // delete_unrepairable
+        &printer,
+    ).unwrap();
+
+    // Corrupted file should be deleted from disk
+    assert!(!corrupt_file.exists(), "Corrupted archive must be deleted");
+
+    // Healthy mod should still exist
+    assert!(healthy_mod.exists(), "Healthy mod must be preserved");
+
+    // Manifest must be preserved and contain only healthy mod
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(target_dir.join("rose_mod_targets.json")).unwrap()).unwrap();
+    let mods = manifest["mods"].as_object().unwrap();
+    assert_eq!(mods.len(), 1);
+
+    // Mappings must only contain Gladiator Draven
+    let summary = crate::mapping::generate_skin_mappings(&skins_dir).unwrap().unwrap();
+    assert_eq!(summary.total_mods, 1);
 }
 
 

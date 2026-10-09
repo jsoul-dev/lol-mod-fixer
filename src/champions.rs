@@ -103,6 +103,27 @@ impl ChampionDb {
             ("trynd", "Tryndamere"),
             ("vlad", "Vladimir"),
             ("warwick", "Warwick"),
+            ("ww", "Warwick"),
+            ("aphe", "Aphelios"),
+            ("leesin", "Lee Sin"),
+            ("eve", "Evelynn"),
+            ("renek", "Renekton"),
+            ("ez", "Ezreal"),
+            ("morde", "Mordekaiser"),
+            ("mord", "Mordekaiser"),
+            ("kha", "Kha'Zix"),
+            ("cho", "Cho'Gath"),
+            ("vel", "Vel'Koz"),
+            ("rek", "Rek'Sai"),
+            ("sai", "Rek'Sai"),
+            ("kai", "Kai'Sa"),
+            ("sa", "Kai'Sa"),
+            ("kog", "Kog'Maw"),
+            ("maw", "Kog'Maw"),
+            ("sol", "Aurelion Sol"),
+            ("zhao", "Xin Zhao"),
+            ("fate", "Twisted Fate"),
+            ("fortune", "Miss Fortune"),
         ];
 
         for (alias, canonical) in aliases {
@@ -168,10 +189,30 @@ pub fn resolve_folder_skin_info(id: u32) -> (Option<&'static str>, Option<&'stat
 
 /// Lookup champion name by raw name string (case/punctuation-insensitive).
 pub fn champion_by_name(name: &str) -> Option<&'static str> {
-
     let db = get_db();
     let norm = normalize_champ_key(name);
     db.name_to_champ.get(&norm).copied()
+}
+
+/// Get all normalized alias tokens for a given canonical champion name.
+pub fn champion_alias_tokens(canonical_name: &str) -> Vec<String> {
+    let db = get_db();
+    let norm_canonical = normalize_champ_key(canonical_name);
+    let mut tokens = Vec::new();
+    tokens.push(norm_canonical);
+    for part in canonical_name.split(|c: char| !c.is_alphanumeric()) {
+        if !part.is_empty() {
+            tokens.push(part.to_ascii_lowercase());
+        }
+    }
+    for (alias, &champ) in &db.name_to_champ {
+        if champ.eq_ignore_ascii_case(canonical_name) {
+            tokens.push(alias.clone());
+        }
+    }
+    tokens.sort();
+    tokens.dedup();
+    tokens
 }
 
 /// Detect champion name from all available context.

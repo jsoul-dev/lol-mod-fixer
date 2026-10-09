@@ -124,6 +124,7 @@ pub fn execute_repair(
     cleanup: bool,
     mapping: bool,
     migrate: bool,
+    delete_unrepairable: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
     let (config, _) = resolve_ltk_config(cli_league, None);
@@ -140,7 +141,25 @@ pub fn execute_repair(
         } else {
             input_path.clone()
         };
-        let res = repair_mod_archive(&effective_input, output.as_deref(), &config, backup, dry_run)?;
+        let mut res = repair_mod_archive(&effective_input, output.as_deref(), &config, backup, dry_run)?;
+        if delete_unrepairable && !dry_run {
+            match &mut res {
+                RepairResult::Unrepairable { path, deleted, .. }
+                | RepairResult::Failed { path, deleted, .. } => {
+                    let was_deleted = if path.is_dir() {
+                        fs_err::remove_dir_all(&path).is_ok()
+                    } else if path.is_file() {
+                        fs_err::remove_file(&path).is_ok()
+                    } else {
+                        false
+                    };
+                    if was_deleted {
+                        *deleted = true;
+                    }
+                }
+                _ => {}
+            }
+        }
         printer.print_repair_item(0, 1, &res);
         printer.print_repair_summary(std::slice::from_ref(&res), None);
 
@@ -204,7 +223,38 @@ pub fn execute_repair(
             } else {
                 path.clone()
             };
-            let res = repair_mod_archive(&active_path, None, &config, backup, dry_run)?;
+            let mut res = repair_mod_archive(&active_path, None, &config, backup, dry_run)?;
+
+            // Automatically clean / delete unrepairable and corrupted files if requested
+            if delete_unrepairable && !dry_run {
+                match &mut res {
+                    RepairResult::Unrepairable { path, deleted, .. }
+                    | RepairResult::Failed { path, deleted, .. } => {
+                        let was_deleted = if path.is_dir() {
+                            fs_err::remove_dir_all(&path).is_ok()
+                        } else if path.is_file() {
+                            fs_err::remove_file(&path).is_ok()
+                        } else {
+                            false
+                        };
+                        if was_deleted {
+                            *deleted = true;
+                            // Rebuild target manifest if in a numeric skin target directory
+                            if let Some(parent) = path.parent() {
+                                if let Some(target_id) = parent
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .and_then(|s| s.parse::<u32>().ok())
+                                {
+                                    let _ = crate::migrate::rebuild_target_manifest(parent, target_id);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
             printer.print_repair_item(idx, total, &res);
             results.push(res);
         }
