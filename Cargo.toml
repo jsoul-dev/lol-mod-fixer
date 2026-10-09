@@ -8,7 +8,7 @@ repository = "https://github.com/jsoul-dev/lol-mod-fixer"
 
 [dependencies]
 ltk-manager-base = { path = "vendor/ltk-manager/crates/ltk-manager-base" }
-ltk-manager-assets = { path = "vendor/ltk-manager/crates/ltk-manager-assets" }
+ltk-manager-assets = { path = "vendor/ltk-manager/crates/ltk-manager-assets", features = ["test-util"] }
 ltk-manager-bin = { path = "vendor/ltk-manager/crates/ltk-manager-bin" }
 ltk-manager-library = { path = "vendor/ltk-manager/crates/ltk-manager-library" }
 ltk-manager-problems = { path = "vendor/ltk-manager/crates/ltk-manager-problems" }

@@ -181,6 +181,17 @@ pub fn repair_mod_archive(
         ..LtkConfig::default()
     };
 
+    let resolver_state = {
+        let state = WadPathResolverState::default();
+        if state.get().has_tables() {
+            state
+        } else {
+            WadPathResolverState::preloaded(ltk_manager_assets::test_util::resolver_naming(&[
+                "data/placeholder",
+            ]))
+        }
+    };
+
     let library = ModLibrary::new(
         Arc::new(NullEventSink),
         Some(storage.clone()),
@@ -188,7 +199,7 @@ pub fn repair_mod_archive(
         Arc::new(LinkedBinState::default()),
         Arc::new(ChecksumMismatchState::default()),
         Arc::new(WadReportState::new(Some(&storage))),
-        Arc::new(WadPathResolverState::default()),
+        Arc::new(resolver_state),
     );
 
     // Step 3: Install mod into temporary library
