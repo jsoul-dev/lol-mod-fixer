@@ -11,7 +11,7 @@ if %errorLevel% == 0 (
     goto :run
 ) else (
     echo Requesting Administrator privileges via UAC to unlock restricted Rose folders...
-    %PWSH% "Start-Process cmd -ArgumentList '/c \"\"%~dpnx0\" %*\"' -Verb RunAs"
+    %PWSH% "Start-Process cmd -ArgumentList '/k \"\"%~dpnx0\" %*\"' -Verb RunAs"
     exit /b
 )
 
