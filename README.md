@@ -63,21 +63,16 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 
 ## Installation & Builds
 
-### Pre-Built Binaries: Which One Should You Download?
+### Pre-Built Binaries (Zero Dependencies)
 
-The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest) provides pre-built binaries:
+The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest) provides a portable standalone package:
 
-1. **`lol-mod-fixer.exe`** / **`lol-mod-fixer-static.exe`** *(Recommended for 99% of Users)*:
-   - Compiles with statically linked C runtime (`/MT` via `+crt-static`).
-   - **Completely standalone**: runs out of the box on any clean Windows 10/11 system with **zero dependencies**—no Microsoft Visual C++ Redistributable (`vcruntime140.dll`), .NET, Python, or external runtimes required.
-   - You will never encounter *"The code execution cannot proceed because VCRUNTIME140.dll was not found"*.
-2. **`lol-mod-fixer-dynamic.exe`**:
-   - Standard MSVC dynamic runtime build (`/MD`), which links against the system's `vcruntime140.dll`.
-   - Requires Microsoft Visual C++ 2015–2022 Redistributable installed on Windows.
-   - Only choose this if you specifically manage shared Visual C++ runtimes system-wide.
-   - *Note: Both variants contain identical features, performance, and repair logic.*
-3. **`run-fixer-as-admin.bat`**:
-   - UAC elevation launcher to automatically unlock restricted Rose folder permissions. Drop beside the `.exe` and right-click → *Run as administrator*.
+* **`lol-mod-fixer.exe`**:
+  - Compiles with statically linked C runtime (`/MT` via `+crt-static`).
+  - **Completely standalone**: runs out of the box on any clean Windows 10/11 system with **zero dependencies**—no Microsoft Visual C++ Redistributable (`vcruntime140.dll`), .NET, Python, or external runtimes required.
+  - You will never encounter *"The code execution cannot proceed because VCRUNTIME140.dll was not found"*.
+* **`run-fixer-as-admin.bat`**:
+  - UAC elevation launcher to automatically unlock restricted Rose folder permissions. Drop beside `lol-mod-fixer.exe` and right-click → *Run as administrator*.
 
 ### Building from Source
 
@@ -138,7 +133,7 @@ To repair, clean, and organize all skins already imported into Rose:
 
 #### Method A: Drop & Double-Click (Recommended)
 1. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
-2. Copy `lol-mod-fixer.exe` (or `lol-mod-fixer-static.exe`) and `run-fixer-as-admin.bat` into that `skins` folder.
+2. Copy `lol-mod-fixer.exe` and `run-fixer-as-admin.bat` into that `skins` folder.
 3. Right-click `run-fixer-as-admin.bat` → **Run as administrator** (or double-click `lol-mod-fixer.exe` directly).
 4. `lol-mod-fixer` will automatically:
    - Recursively scan all champion skin folders (e.g., `106000`, `33000`, `34000`).

@@ -31,21 +31,14 @@ jobs:
       - name: Run Tests
         run: cargo test --release
 
-      - name: Build Dynamic Binary
-        run: cargo build --release
-
       - name: Build Standalone Static Binary (+crt-static)
-        shell: pwsh
-        run: |
-          $env:RUSTFLAGS = "-C target-feature=+crt-static"
-          cargo build --release --target x86_64-pc-windows-msvc
+        run: cargo build --release
 
       - name: Stage Artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-artifacts
-          Copy-Item "target/x86_64-pc-windows-msvc/release/lol-mod-fixer.exe" "release-artifacts/lol-mod-fixer-static.exe"
-          Copy-Item "target/release/lol-mod-fixer.exe" "release-artifacts/lol-mod-fixer-dynamic.exe"
+          Copy-Item "target/release/lol-mod-fixer.exe" "release-artifacts/lol-mod-fixer.exe"
           Copy-Item "scripts/run-fixer-as-admin.bat" "release-artifacts/run-fixer-as-admin.bat"
           Get-Item release-artifacts/*
 
@@ -54,7 +47,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            release-artifacts/lol-mod-fixer-static.exe
-            release-artifacts/lol-mod-fixer-dynamic.exe
+            release-artifacts/lol-mod-fixer.exe
             release-artifacts/run-fixer-as-admin.bat
           generate_release_notes: true

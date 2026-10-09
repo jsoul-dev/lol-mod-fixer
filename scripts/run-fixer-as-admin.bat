@@ -24,20 +24,16 @@ echo.
 
 set "EXE="
 
-if exist "%~dp0lol-mod-fixer-static.exe" (
-    set "EXE=%~dp0lol-mod-fixer-static.exe"
-) else if exist "%~dp0lol-mod-fixer.exe" (
+if exist "%~dp0lol-mod-fixer.exe" (
     set "EXE=%~dp0lol-mod-fixer.exe"
-) else if exist "%~dp0lol-mod-fixer-dynamic.exe" (
-    set "EXE=%~dp0lol-mod-fixer-dynamic.exe"
-) else if exist "%~dp0..\lol-mod-fixer-static.exe" (
-    set "EXE=%~dp0..\lol-mod-fixer-static.exe"
+) else if exist "%~dp0lol-mod-fixer-static.exe" (
+    set "EXE=%~dp0lol-mod-fixer-static.exe"
 ) else if exist "%~dp0..\lol-mod-fixer.exe" (
     set "EXE=%~dp0..\lol-mod-fixer.exe"
-) else if exist "%~dp0..\lol-mod-fixer-dynamic.exe" (
-    set "EXE=%~dp0..\lol-mod-fixer-dynamic.exe"
-) else if exist "%~dp0..\dist\lol-mod-fixer-static.exe" (
-    set "EXE=%~dp0..\dist\lol-mod-fixer-static.exe"
+) else if exist "%~dp0..\dist\lol-mod-fixer.exe" (
+    set "EXE=%~dp0..\dist\lol-mod-fixer.exe"
+) else if exist "%~dp0..\target\release\lol-mod-fixer.exe" (
+    set "EXE=%~dp0..\target\release\lol-mod-fixer.exe"
 ) else (
     for %%F in ("%~dp0lol-mod-fixer*.exe") do (
         set "EXE=%%F"
@@ -48,16 +44,16 @@ if defined EXE (
     "%EXE%" repair --pause %*
     if errorlevel 1 (
         echo.
-        echo ======================================================================
+        echo =========================================================
         echo  lol-mod-fixer finished with an error or warning code.
-        echo ======================================================================
+        echo =========================================================
         pause
     )
 ) else (
-    echo Error: Could not find lol-mod-fixer-static.exe or lol-mod-fixer.exe in:
+    echo Error: Could not find lol-mod-fixer.exe in:
     echo   "%~dp0"
     echo.
-    echo Please make sure lol-mod-fixer-static.exe is placed in the same folder as this script.
+    echo Please make sure lol-mod-fixer.exe is placed in the same folder as this script.
     echo.
     pause
 )
