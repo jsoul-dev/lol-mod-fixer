@@ -1,6 +1,11 @@
 # LoL Mod Fixer (`lol-mod-fixer`)
 
-A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, and automatic name beautification, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose Mod Manager](https://github.com/the-rose-project/rose) integration.
+[![CI](https://github.com/jsoul-dev/LoL-Mod-Fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/LoL-Mod-Fixer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jsoul-dev/LoL-Mod-Fixer?style=flat-square&color=blue)](https://github.com/jsoul-dev/LoL-Mod-Fixer/releases/latest)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows)](https://github.com/jsoul-dev/LoL-Mod-Fixer/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
+
+A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, automatic name beautification, and legacy structure migration, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose](https://github.com/Alban1911/Rose) integration.
 
 `lol-mod-fixer` inspects mod packages headlessly using LTK Manager's real health and problems engine, reports detected property mismatches and outdated types, and repairs them using LTK Manager's actual repair and export pipeline without needing the Tauri desktop GUI.
 
