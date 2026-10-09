@@ -17,7 +17,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 - **Single Portable Executable (Zero Dependencies)**: Compiles with statically linked C runtime (`+crt-static`), meaning it runs out-of-the-box on any Windows 10/11 computer without requiring Visual C++ Redistributable, .NET, Python, or Node.js.
 - **Automatic Mod & Folder Beautification (ON by Default)**:
   - Formats all mod and folder names into clean, client-friendly titles:
-    $$\text{<Mod Skin Name>} \quad \text{<Champion Name>} \quad \text{v<Version>}$$
+    `<Mod Skin Name> <Champion Name> v<Version>`
   - Examples:
     - `Sonic_Rammus-1.0.0` $\rightarrow$ `Sonic Rammus v1.0`
     - `Rammus_Sonic-1.0.0` $\rightarrow$ `Sonic Rammus v1.0` *(always skin name first, champion second)*
