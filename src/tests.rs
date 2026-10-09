@@ -1351,12 +1351,6 @@ fn test_cli_subcommands_accept_pause_flags() {
 }
 
 #[test]
-fn test_process_detection_does_not_panic() {
-    let procs = crate::process::detect_running_conflicting_processes();
-    println!("Detected running processes in test: {:?}", procs);
-}
-
-#[test]
 fn test_cleanup_empty_folders_with_desktop_ini() {
     let temp = tempfile::tempdir().unwrap();
     let skins_dir = temp.path().join("skins");

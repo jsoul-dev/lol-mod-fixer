@@ -18,7 +18,6 @@ mod formats;
 mod health;
 mod output;
 pub mod permissions;
-pub mod process;
 mod repair;
 mod replacement;
 pub mod rose;
