@@ -297,6 +297,18 @@ pub fn execute_repair(
         }
     }
 
+    // 2.5 Post-repair synchronization pass for Rose manifests (in case any mod was renamed, repaired, or quarantined)
+    if migrate && !dry_run && crate::migrate::is_rose_skins_directory(&input_path) {
+        match crate::migrate::sync_rose_target_manifests(&input_path) {
+            Ok(synced) => {
+                if synced > 0 {
+                    tracing::info!("Synchronized {synced} rose_mod_targets.json manifest(s)");
+                }
+            }
+            Err(e) => tracing::warn!("Rose manifest synchronization notice: {e}"),
+        }
+    }
+
     // 3. Generate/update skin ID mappings (skin_mappings.txt and skin_mappings.json)
     if mapping && !dry_run {
         match crate::mapping::generate_skin_mappings(&input_path) {

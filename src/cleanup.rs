@@ -47,16 +47,100 @@ impl CleanupReport {
 }
 
 
-/// Check if a directory is completely empty (0 entries).
+/// Check if a filename is an OS junk/metadata file (e.g. desktop.ini, Thumbs.db, .DS_Store).
+pub fn is_os_metadata_file(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower == "desktop.ini"
+        || lower == "thumbs.db"
+        || lower == ".ds_store"
+        || lower.starts_with("._")
+}
+
+/// Safely remove a file, clearing readonly attribute if needed.
+pub fn force_remove_file(path: &Path) -> std::io::Result<()> {
+    if let Ok(meta) = fs_err::metadata(path) {
+        let mut perms = meta.permissions();
+        if perms.readonly() {
+            perms.set_readonly(false);
+            let _ = fs_err::set_permissions(path, perms);
+        }
+    }
+    fs_err::remove_file(path)
+}
+
+/// Check if a directory is completely empty or contains ONLY OS junk/metadata files (e.g. desktop.ini).
 pub fn is_dir_empty(path: &Path) -> bool {
     match fs_err::read_dir(path) {
-        Ok(mut entries) => entries.next().is_none(),
+        Ok(entries) => {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if entry.path().is_file() && is_os_metadata_file(&name) {
+                    continue;
+                }
+                return false;
+            }
+            true
+        }
         Err(_) => false,
     }
 }
 
+/// Safely remove a directory, clearing readonly attribute and unlocking permissions if needed.
+pub fn force_remove_dir(path: &Path) -> std::io::Result<()> {
+    if let Ok(meta) = fs_err::metadata(path) {
+        let mut perms = meta.permissions();
+        if perms.readonly() {
+            perms.set_readonly(false);
+            let _ = fs_err::set_permissions(path, perms);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        wide.push(0);
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn SetFileAttributesW(lpFileName: *const u16, dwFileAttributes: u32) -> i32;
+        }
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x00000010;
+        unsafe {
+            let _ = SetFileAttributesW(wide.as_ptr(), FILE_ATTRIBUTE_DIRECTORY);
+        }
+    }
+
+    match fs_err::remove_dir(path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            if crate::permissions::is_elevated() {
+                crate::permissions::unlock_folder_permissions(path);
+                fs_err::remove_dir(path)
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
+/// Clean OS metadata files in a directory and remove the directory itself.
+pub fn clean_and_remove_dir(path: &Path) -> std::io::Result<()> {
+    if let Ok(entries) = fs_err::read_dir(path) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_file() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if is_os_metadata_file(&name) || is_rose_target_file(&name) {
+                    let _ = force_remove_file(&p);
+                }
+            }
+        }
+    }
+    force_remove_dir(path)
+}
+
 /// Check if a filename is a known Rose target manifest or related temp file.
-fn is_rose_target_file(name: &str) -> bool {
+pub fn is_rose_target_file(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower == ROSE_MOD_TARGETS
         || lower == ROSE_WAD_TARGETS
@@ -81,7 +165,7 @@ pub fn clean_empty_hematite_fixed(base_dir: &Path) -> usize {
 
     for folder in hematite_folders {
         if is_dir_empty(&folder) {
-            match fs_err::remove_dir(&folder) {
+            match clean_and_remove_dir(&folder) {
                 Ok(()) => {
                     tracing::debug!("Deleted empty Hematite-Fixed folder: {}", folder.display());
                     deleted += 1;
@@ -119,7 +203,7 @@ pub fn clean_empty_leaf_subdirs(mod_dir: &Path, report: &mut CleanupReport) {
     for dir in subdirs {
         if is_dir_empty(&dir) {
             let rel = dir.strip_prefix(mod_dir).unwrap_or(&dir);
-            match fs_err::remove_dir(&dir) {
+            match clean_and_remove_dir(&dir) {
                 Ok(()) => {
                     tracing::info!(
                         "Deleted empty internal mod subfolder: {}\\{}",
@@ -141,7 +225,6 @@ pub fn clean_empty_leaf_subdirs(mod_dir: &Path, report: &mut CleanupReport) {
 
 /// Clean empty folders and orphan target manifests in the specified directory.
 pub fn cleanup_empty_rose_folders(base_dir: &Path) -> FixerResult<CleanupReport> {
-
     let mut report = CleanupReport::default();
 
     if !base_dir.is_dir() {
@@ -152,29 +235,32 @@ pub fn cleanup_empty_rose_folders(base_dir: &Path) -> FixerResult<CleanupReport>
     report.deleted_hematite_fixed += clean_empty_hematite_fixed(base_dir);
 
     // Identify candidate target directories:
-    // Either numeric names (e.g. "106000", "33000") or directories containing rose target metadata.
+    // Either base_dir itself if numeric, or numeric children of base_dir, or directories with Rose metadata.
     let mut target_dirs: Vec<PathBuf> = Vec::new();
 
-    let read_entries = match fs_err::read_dir(base_dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            tracing::warn!("Could not read directory {}: {e}", base_dir.display());
-            return Ok(report);
-        }
-    };
+    let base_name = base_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let base_is_numeric = base_name.chars().all(|c| c.is_ascii_digit()) && !base_name.is_empty();
 
-    for entry in read_entries.filter_map(|e| e.ok()) {
-        let p = entry.path();
-        if !p.is_dir() {
-            continue;
-        }
+    if base_is_numeric {
+        target_dirs.push(base_dir.to_path_buf());
+    } else if let Ok(read_entries) = fs_err::read_dir(base_dir) {
+        for entry in read_entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if !p.is_dir() {
+                continue;
+            }
 
-        let name = entry.file_name().to_string_lossy().to_string();
-        let is_numeric = name.chars().all(|c| c.is_ascii_digit()) && !name.is_empty();
-        let has_manifest = p.join(ROSE_MOD_TARGETS).is_file() || p.join(ROSE_WAD_TARGETS).is_file();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_numeric = name.chars().all(|c| c.is_ascii_digit()) && !name.is_empty();
+            let has_manifest =
+                p.join(ROSE_MOD_TARGETS).is_file() || p.join(ROSE_WAD_TARGETS).is_file();
 
-        if is_numeric || has_manifest {
-            target_dirs.push(p);
+            if is_numeric || has_manifest {
+                target_dirs.push(p);
+            }
         }
     }
 
@@ -205,7 +291,7 @@ pub fn cleanup_empty_rose_folders(base_dir: &Path) -> FixerResult<CleanupReport>
                         continue;
                     }
                     if is_dir_empty(&mod_path) {
-                        match fs_err::remove_dir(&mod_path) {
+                        match clean_and_remove_dir(&mod_path) {
                             Ok(()) => {
                                 tracing::info!(
                                     "Deleted empty mod folder: {}\\{}",
@@ -229,16 +315,43 @@ pub fn cleanup_empty_rose_folders(base_dir: &Path) -> FixerResult<CleanupReport>
             }
         }
 
-
         // Step 2: Check target folder after mod cleanup
         let remaining_items: Vec<_> = match fs_err::read_dir(&target_dir) {
             Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
             Err(_) => continue,
         };
 
-        if remaining_items.is_empty() {
-            // Target is completely empty
-            match fs_err::remove_dir(&target_dir) {
+        let mut subdirs = Vec::new();
+        let mut manifest_files = Vec::new();
+        let mut metadata_files = Vec::new();
+        let mut other_files = Vec::new();
+
+        for item in &remaining_items {
+            let p = item.path();
+            let name = item.file_name().to_string_lossy().to_string();
+            if p.is_dir() {
+                subdirs.push(p);
+            } else if is_rose_target_file(&name) {
+                manifest_files.push(p);
+            } else if is_os_metadata_file(&name) {
+                metadata_files.push(p);
+            } else {
+                other_files.push(p);
+            }
+        }
+
+        // Target directory has no mod folders and no other files (may have desktop.ini and/or orphan manifests)
+        if subdirs.is_empty() && other_files.is_empty() {
+            for m in &manifest_files {
+                if force_remove_file(m).is_ok() {
+                    report.deleted_manifest_files += 1;
+                }
+            }
+            for meta in &metadata_files {
+                let _ = force_remove_file(meta);
+            }
+
+            match force_remove_dir(&target_dir) {
                 Ok(()) => {
                     tracing::info!(
                         "Deleted empty target folder: {}",
@@ -248,50 +361,6 @@ pub fn cleanup_empty_rose_folders(base_dir: &Path) -> FixerResult<CleanupReport>
                 }
                 Err(e) => {
                     tracing::warn!("Could not delete target folder {}: {e}", target_dir.display());
-                }
-            }
-            continue;
-        }
-
-        // Check if target contains ONLY Rose target manifest files and 0 subdirectories/other files
-        let has_subdirectories = remaining_items.iter().any(|item| item.path().is_dir());
-        let all_files_are_manifests = !remaining_items.is_empty()
-            && remaining_items.iter().all(|item| {
-                item.path().is_file()
-                    && is_rose_target_file(&item.file_name().to_string_lossy())
-            });
-
-        if !has_subdirectories && all_files_are_manifests {
-            // Unlink the orphan manifest files
-            let mut all_unlinked = true;
-            for item in &remaining_items {
-                let p = item.path();
-                match fs_err::remove_file(&p) {
-                    Ok(()) => {
-                        report.deleted_manifest_files += 1;
-                    }
-                    Err(e) => {
-                        tracing::warn!("Could not remove manifest {}: {e}", p.display());
-                        all_unlinked = false;
-                    }
-                }
-            }
-
-            if all_unlinked {
-                match fs_err::remove_dir(&target_dir) {
-                    Ok(()) => {
-                        tracing::info!(
-                            "Deleted empty target folder (orphan manifest): {}",
-                            target_dir.file_name().unwrap_or_default().to_string_lossy()
-                        );
-                        report.deleted_targets += 1;
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Could not delete empty target folder {}: {e}",
-                            target_dir.display()
-                        );
-                    }
                 }
             }
         }

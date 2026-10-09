@@ -242,7 +242,13 @@ pub fn validate_mod_folder(folder: &Path) -> bool {
     walkdir::WalkDir::new(folder)
         .into_iter()
         .filter_map(|e| e.ok())
-        .any(|e| e.file_type().is_file())
+        .any(|e| {
+            if !e.file_type().is_file() {
+                return false;
+            }
+            let name = e.file_name().to_string_lossy();
+            !crate::cleanup::is_os_metadata_file(&name)
+        })
 }
 
 /// Check if a directory looks like an extracted Rose mod (has META or WAD or RAW).
@@ -335,6 +341,17 @@ pub fn rebuild_target_manifest(target_folder: &Path, target: u32) -> FixerResult
         "mods": mods_map
     });
 
+    // Check if the manifest on disk already matches exactly
+    if json_path.exists() {
+        if let Ok(existing_content) = fs_err::read_to_string(&json_path) {
+            if let Ok(existing_json) = serde_json::from_str::<serde_json::Value>(&existing_content) {
+                if existing_json == manifest_data {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+
     let tmp_path = target_folder.join(format!(".{}.tmp", ROSE_MOD_TARGETS));
     let content = serde_json::to_string_pretty(&manifest_data)?;
     fs_err::write(&tmp_path, content)?;
@@ -362,7 +379,15 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
 
     // Collect numeric target subdirectories
     let mut target_dirs: Vec<PathBuf> = Vec::new();
-    if let Ok(entries) = fs_err::read_dir(base_dir) {
+    let base_name = base_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let base_is_numeric = base_name.chars().all(|c| c.is_ascii_digit()) && !base_name.is_empty();
+
+    if base_is_numeric {
+        target_dirs.push(base_dir.to_path_buf());
+    } else if let Ok(entries) = fs_err::read_dir(base_dir) {
         for entry in entries.filter_map(|e| e.ok()) {
             let p = entry.path();
             if p.is_dir() {
@@ -422,7 +447,6 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
             }
         }
 
-        let mut extracted_any = false;
 
         for archive in archives {
             let stem = match archive.file_stem().and_then(|s| s.to_str()) {
@@ -464,7 +488,6 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
                             stem
                         );
                         report.extracted_archives += 1;
-                        extracted_any = true;
                     } else {
                         // Empty or invalid extraction: cleanup incomplete destination, preserve original
                         let _ = fs_err::remove_dir_all(&destination);
@@ -497,17 +520,66 @@ pub fn migrate_outdated_rose_directory(base_dir: &Path) -> FixerResult<Migration
             }
         }
 
-        // Rebuild or ensure rose_mod_targets.json exists if archives were extracted
-        // or if rose_mod_targets.json is missing while mod folders exist
-        let manifest_path = target_dir.join(ROSE_MOD_TARGETS);
-        if extracted_any || !manifest_path.exists() {
-            if let Ok(rebuilt) = rebuild_target_manifest(&target_dir, target_id) {
-                if rebuilt {
-                    report.manifests_rebuilt += 1;
-                }
+        // Rebuild or synchronize rose_mod_targets.json with mod folders currently on disk
+        if let Ok(rebuilt) = rebuild_target_manifest(&target_dir, target_id) {
+            if rebuilt {
+                report.manifests_rebuilt += 1;
             }
         }
     }
 
     Ok(report)
+}
+
+/// Check and synchronize `rose_mod_targets.json` across all numeric skin target folders.
+///
+/// Ensures every skin target directory (e.g. `102000`) has an accurate `rose_mod_targets.json`
+/// matching all currently present valid mod folders on disk, fixing cases where mods were
+/// manually pasted, removed, or imported from other folders.
+pub fn sync_rose_target_manifests(base_dir: &Path) -> FixerResult<usize> {
+    let mut updated = 0;
+
+    if !base_dir.is_dir() {
+        return Ok(updated);
+    }
+
+    let mut target_dirs: Vec<PathBuf> = Vec::new();
+    let base_name = base_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let base_is_numeric = base_name.chars().all(|c| c.is_ascii_digit()) && !base_name.is_empty();
+
+    if base_is_numeric {
+        target_dirs.push(base_dir.to_path_buf());
+    } else if let Ok(entries) = fs_err::read_dir(base_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.chars().all(|c| c.is_ascii_digit()) && !name.is_empty() {
+                    target_dirs.push(p);
+                }
+            }
+        }
+    }
+
+    for target_dir in target_dirs {
+        let target_id: u32 = match target_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|s| s.parse::<u32>().ok())
+        {
+            Some(id) => id,
+            None => continue,
+        };
+
+        if let Ok(rebuilt) = rebuild_target_manifest(&target_dir, target_id) {
+            if rebuilt {
+                updated += 1;
+            }
+        }
+    }
+
+    Ok(updated)
 }

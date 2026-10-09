@@ -1071,7 +1071,7 @@ fn test_migrate_outdated_rose_directory() {
     // Run migration
     let report = crate::migrate::migrate_outdated_rose_directory(skins_dir).unwrap();
     assert_eq!(report.extracted_archives, 2);
-    assert_eq!(report.manifests_rebuilt, 2);
+    assert_eq!(report.manifests_rebuilt, 3);
 
     // 1. Check Jax extraction
     assert!(!jax_archive.exists(), "Raw Jax archive must be deleted");
@@ -1110,9 +1110,10 @@ fn test_migrate_outdated_rose_directory() {
     // 3. Check Volibear (already modern) remained untouched
     assert!(voli_mod.exists());
 
-    // 4. Idempotency test: Re-running migration on the now-modern structure extracts 0 archives
+    // 4. Idempotency test: Re-running migration on the now-modern structure extracts 0 archives and rebuilds 0 manifests
     let report2 = crate::migrate::migrate_outdated_rose_directory(skins_dir).unwrap();
     assert_eq!(report2.extracted_archives, 0);
+    assert_eq!(report2.manifests_rebuilt, 0);
 }
 
 #[test]
@@ -1353,6 +1354,101 @@ fn test_cli_subcommands_accept_pause_flags() {
 fn test_process_detection_does_not_panic() {
     let procs = crate::process::detect_running_conflicting_processes();
     println!("Detected running processes in test: {:?}", procs);
+}
+
+#[test]
+fn test_cleanup_empty_folders_with_desktop_ini() {
+    let temp = tempfile::tempdir().unwrap();
+    let skins_dir = temp.path().join("skins");
+    fs_err::create_dir_all(&skins_dir).unwrap();
+
+    // 1. Target directory 82000 containing only desktop.ini
+    let target_82000 = skins_dir.join("82000");
+    fs_err::create_dir_all(&target_82000).unwrap();
+    fs_err::write(target_82000.join("desktop.ini"), "[.ShellClassInfo]\r\nIconResource=icon.ico,0").unwrap();
+
+    // 2. Target directory 106000 containing a valid mod folder
+    let target_106000 = skins_dir.join("106000");
+    let valid_mod = target_106000.join("Angel Volibear v1.0");
+    fs_err::create_dir_all(valid_mod.join("META")).unwrap();
+    fs_err::write(valid_mod.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(valid_mod.join("WAD")).unwrap();
+    fs_err::write(valid_mod.join("WAD").join("volibear.wad.client"), "dummy").unwrap();
+
+    // 3. Mod directory containing only desktop.ini inside 106000
+    let junk_mod = target_106000.join("Empty Junk Mod");
+    fs_err::create_dir_all(&junk_mod).unwrap();
+    fs_err::write(junk_mod.join("desktop.ini"), "junk").unwrap();
+
+    let report = crate::cleanup::cleanup_empty_rose_folders(&skins_dir).unwrap();
+
+    // 82000 should be deleted completely
+    assert!(!target_82000.exists(), "Target 82000 containing only desktop.ini must be purged");
+    assert_eq!(report.deleted_targets, 1, "Should report 1 deleted target");
+
+    // Junk mod inside 106000 should be deleted
+    assert!(!junk_mod.exists(), "Empty mod folder with desktop.ini must be purged");
+    assert_eq!(report.deleted_mods, 1, "Should report 1 deleted empty mod");
+
+    // Valid mod should remain untouched
+    assert!(valid_mod.exists(), "Valid mod folder must be preserved");
+}
+
+#[test]
+fn test_rose_manifest_sync_when_mods_pasted() {
+    let temp = tempfile::tempdir().unwrap();
+    let skins_dir = temp.path().join("skins");
+    let target_102000 = skins_dir.join("102000");
+    fs_err::create_dir_all(&target_102000).unwrap();
+
+    // Create Mod 1: Kaido Shyvana v1.0
+    let mod1 = target_102000.join("Kaido Shyvana v1.0");
+    fs_err::create_dir_all(mod1.join("META")).unwrap();
+    fs_err::write(mod1.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(mod1.join("WAD")).unwrap();
+    fs_err::write(mod1.join("WAD").join("shyvana.wad.client"), "wad1").unwrap();
+
+    // Build initial manifest for just Mod 1
+    crate::migrate::rebuild_target_manifest(&target_102000, 102000).unwrap();
+
+    // Verify initial manifest has 1 mod
+    let manifest_path = target_102000.join("rose_mod_targets.json");
+    let manifest_content = fs_err::read_to_string(&manifest_path).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&manifest_content).unwrap();
+    assert_eq!(parsed["mods"].as_object().unwrap().len(), 1);
+
+    // Simulate user copying/pasting 2 more mods from another directory into 102000
+    let mod2 = target_102000.join("Blossom Lizard Shyvana");
+    fs_err::create_dir_all(mod2.join("META")).unwrap();
+    fs_err::write(mod2.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(mod2.join("WAD")).unwrap();
+    fs_err::write(mod2.join("WAD").join("shyvana.wad.client"), "wad2").unwrap();
+
+    let mod3 = target_102000.join("Wild Rift Shyvana");
+    fs_err::create_dir_all(mod3.join("META")).unwrap();
+    fs_err::write(mod3.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(mod3.join("WAD")).unwrap();
+    fs_err::write(mod3.join("WAD").join("shyvana.wad.client"), "wad3").unwrap();
+
+    // Now run sync_rose_target_manifests
+    let synced = crate::migrate::sync_rose_target_manifests(&skins_dir).unwrap();
+    assert_eq!(synced, 1, "Should detect out-of-sync manifest and rebuild it");
+
+    // Read updated manifest
+    let updated_content = fs_err::read_to_string(&manifest_path).unwrap();
+    let updated: serde_json::Value = serde_json::from_str(&updated_content).unwrap();
+    let mods = updated["mods"].as_object().unwrap();
+
+    // Must now contain all 3 mods!
+    assert_eq!(mods.len(), 3, "Manifest must now contain all 3 mods");
+    let mod_names: Vec<&str> = mods.values().map(|v| v["name"].as_str().unwrap()).collect();
+    assert!(mod_names.contains(&"Kaido Shyvana v1.0"));
+    assert!(mod_names.contains(&"Blossom Lizard Shyvana"));
+    assert!(mod_names.contains(&"Wild Rift Shyvana"));
+
+    // Running sync again should do nothing because it's already in sync
+    let synced_again = crate::migrate::sync_rose_target_manifests(&skins_dir).unwrap();
+    assert_eq!(synced_again, 0, "Second sync must be a no-op since manifest is up to date");
 }
 
 

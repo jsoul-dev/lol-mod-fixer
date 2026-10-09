@@ -117,8 +117,8 @@ pub fn collect_mappings(base_dir: &Path) -> FixerResult<Vec<ModFolderMapping>> {
             }
         }
 
-        // Only include if folder is numeric or has installed mods
-        if skin_id.is_none() && mods.is_empty() {
+        // Only include folders that have installed mods
+        if mods.is_empty() {
             continue;
         }
 
