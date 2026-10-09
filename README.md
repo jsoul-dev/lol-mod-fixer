@@ -32,6 +32,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 - **Automatic Empty Folder & Orphan Manifest Cleanup (ON by Default)**:
   - Automatically cleans empty mod subdirectories and unused target folders.
   - Automatically deletes orphan target directories containing only `rose_mod_targets.json` / `rose_wad_targets.json` when all mods have been uninstalled.
+  - Recursively removes empty folders even when locked or tagged with hidden, read-only Windows system files like `desktop.ini`.
   - Recursively searches for and removes empty `Hematite-Fixed` folders.
   - Can be disabled at any time with `--no-cleanup`.
 - **Automatic Skin ID Mapping Generator (`skin_mappings.txt` & `skin_mappings.json`) (ON by Default)**:
@@ -49,8 +50,8 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - Accurately identifies champions using parent folder Skin IDs (`106000` → Volibear, `33000` → Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
 - **Rose Mod Manager Integration**:
   - **Legacy & Raw Archive Auto-Migration (ON by Default)**: Automatically detects outdated or raw archives (`.fantome`, `.zip`, and `.modpkg`) placed directly inside numeric skin target folders without being extracted. Safely extracts archives (converting `.modpkg` binary packages via LTK project unpacking into clean Rose layout), flattens redundant wrapper folders, validates files, unlinks original archives, and builds `rose_mod_targets.json` with exact `folderHash` and `wadHashes` so mods inject properly in Rose client and Party Mode. Already updated structures are left completely untouched. (Disable with `--no-migrate`).
-  - **Extracted Mod Folder Support**: Directly supports `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` structures.
-  - **Manifest Synchronization**: Automatically updates Rose's `rose_mod_targets.json` with the newly repaired `folderHash` and `wadHashes` using Rose's exact hashing algorithm, preserving target skin IDs and display names.
+  - **Extracted & RAW Asset Mod Folder Support**: Directly supports standard extracted mods (`<mod_dir>/META/info.json` + `<mod_dir>/WAD/*.wad.client`) as well as loose `RAW/` or `DATA/` asset trees (frequently distributed as zip archives or texture overrides). Accurately resolves champion names and extracts versions even when pre-compiled WADs are not present.
+  - **Multi-Mod Pasting & Manifest Reconciliation**: Automatically reconciles, repairs, and synchronizes `rose_mod_targets.json` when multiple mods are manually copied or merged into an existing target folder, ensuring all installed mods on that skin ID are preserved with correct hashes.
   - **Automatic NTFS Permissions Unlocking**: Detects restricted/hooked Rose folders (`os error 5: Access is denied`) and automatically resets NTFS access control lists (ACLs) when elevated.
 - **Double-Click / Zero-Argument Workflow**: Dropping `lol-mod-fixer.exe` into a folder with mods and double-clicking automatically migrates legacy archives, cleans empty folders, scans and repairs the directory, synchronizes skin ID mappings, and pauses on completion so the console window remains visible.
 
@@ -64,9 +65,9 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 
 ### Pre-Built Binaries: Which One Should You Download?
 
-The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest) provides two executable variants:
+The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest) provides pre-built binaries:
 
-1. **`lol-mod-fixer-static.exe`** *(Recommended for 99% of Users)*:
+1. **`lol-mod-fixer.exe`** / **`lol-mod-fixer-static.exe`** *(Recommended for 99% of Users)*:
    - Compiles with statically linked C runtime (`/MT` via `+crt-static`).
    - **Completely standalone**: runs out of the box on any clean Windows 10/11 system with **zero dependencies**—no Microsoft Visual C++ Redistributable (`vcruntime140.dll`), .NET, Python, or external runtimes required.
    - You will never encounter *"The code execution cannot proceed because VCRUNTIME140.dll was not found"*.
@@ -74,7 +75,9 @@ The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
    - Standard MSVC dynamic runtime build (`/MD`), which links against the system's `vcruntime140.dll`.
    - Requires Microsoft Visual C++ 2015–2022 Redistributable installed on Windows.
    - Only choose this if you specifically manage shared Visual C++ runtimes system-wide.
-   - *Note: Both variants contain identical features, performance, and repair logic (the ~5 KB difference between them is solely the embedded CRT glue code).*
+   - *Note: Both variants contain identical features, performance, and repair logic.*
+3. **`run-fixer-as-admin.bat`**:
+   - UAC elevation launcher to automatically unlock restricted Rose folder permissions. Drop beside the `.exe` and right-click → *Run as administrator*.
 
 ### Building from Source
 
@@ -135,8 +138,8 @@ To repair, clean, and organize all skins already imported into Rose:
 
 #### Method A: Drop & Double-Click (Recommended)
 1. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
-2. Copy `lol-mod-fixer-static.exe` and `run-fixer-as-admin.bat` into that `skins` folder.
-3. Right-click `run-fixer-as-admin.bat` → **Run as administrator** (or double-click `lol-mod-fixer-static.exe` directly).
+2. Copy `lol-mod-fixer.exe` (or `lol-mod-fixer-static.exe`) and `run-fixer-as-admin.bat` into that `skins` folder.
+3. Right-click `run-fixer-as-admin.bat` → **Run as administrator** (or double-click `lol-mod-fixer.exe` directly).
 4. `lol-mod-fixer` will automatically:
    - Recursively scan all champion skin folders (e.g., `106000`, `33000`, `34000`).
    - Repair broken BIN properties, outdated sound bank IDs, and format errors in-place.
@@ -264,7 +267,7 @@ lol-mod-fixer config set-pause false
 | Format | Extension / Structure | Health Check | Repair Support | Technical Rationale |
 |---|---|---|---|---|
 | **Fantome Archive** | `.fantome`, `.zip` | ✅ Yes | ✅ Yes | Full support via `ltk-manager-library` and `ltk_fantome`. Outdated BIN property types, outdated references, and audio bank IDs are detected and repaired. |
-| **Fantome Folder** | `<dir>/META/info.json`<br>`<dir>/WAD/*.wad.client` | ✅ Yes | ✅ Yes | Direct support for extracted mods and Rose directories. Inspected, repaired, and beautified in-place with atomic rollback safety and `rose_mod_targets.json` synchronization. |
+| **Fantome Folder** | `<dir>/META/info.json`<br>`<dir>/WAD/*.wad.client`<br>*(or `<dir>/RAW/*`, `<dir>/DATA/*`)* | ✅ Yes | ✅ Yes | Direct support for extracted mods, Rose directories, and loose RAW/DATA asset mods. Inspected, repaired, and beautified in-place with atomic rollback safety, version resolution, and `rose_mod_targets.json` synchronization. |
 | **ModPkg** | `.modpkg` | ✅ Detected / Auto-Migrated | ✅ Repaired upon extraction | Standalone `.modpkg` is an immutable package in LTK Manager. However, `lol-mod-fixer`'s migration engine automatically converts raw `.modpkg` archives into clean Rose extracted layouts (`META/` + `WAD/`), repairing and hashing them in the process. |
 | **Client WAD** | `.wad.client`, `.wad` | ✅ Detected | ❌ Unsupported | Standalone WAD archives contain only 64-bit xxHash hashes in their table of contents. Custom author filenames cannot be recovered without mod project metadata. |
 
