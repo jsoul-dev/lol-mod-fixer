@@ -1,0 +1,72 @@
+name: Check Upstream LTK Updates
+
+on:
+  schedule:
+    # Run every Wednesday at 06:00 UTC (shortly after standard bi-weekly League patch cycles)
+    - cron: '0 6 * * 3'
+  workflow_dispatch: # Allows manual trigger from Actions tab anytime
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    name: Check & Update ltk-manager
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Submodule to Remote Latest
+        shell: pwsh
+        id: update_submodule
+        run: |
+          git submodule update --remote --merge vendor/ltk-manager
+          $diff = git status --porcelain
+          if ($diff) {
+              Write-Host "New upstream commits detected in vendor/ltk-manager!"
+              echo "has_changes=true" >> $env:GITHUB_OUTPUT
+          } else {
+              Write-Host "vendor/ltk-manager is already up to date with upstream."
+              echo "has_changes=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Setup Rust toolchain
+        if: steps.update_submodule.outputs.has_changes == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust Cache
+        if: steps.update_submodule.outputs.has_changes == 'true'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify Builds and Tests with New Engine
+        if: steps.update_submodule.outputs.has_changes == 'true'
+        run: |
+          cargo check --verbose
+          cargo test --verbose
+
+      - name: Create Pull Request for Upstream Update
+        if: steps.update_submodule.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(upstream): update ltk-manager engine submodule"
+          title: "chore(upstream): update ltk-manager to latest upstream"
+          body: |
+            ### Automated Upstream LTK Update
+            New commits were detected in [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager).
+            
+            - Updated `vendor/ltk-manager` submodule to remote `HEAD`.
+            - Automated `cargo test` verification passed successfully.
+            
+            Review and merge this PR to incorporate the latest upstream repair rules and format changes.
+          branch: "automated/update-ltk-manager"
+          delete-branch: true

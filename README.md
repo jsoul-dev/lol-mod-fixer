@@ -87,6 +87,17 @@ The output executable is created at:
 target/release/lol-mod-fixer.exe
 ```
 
+### Updating with Upstream LeagueToolkit Releases
+When League of Legends patches and `LeagueToolkit/ltk-manager` ships updated repair rules:
+```bash
+# Pull the latest upstream LTK engine into the submodule
+git submodule update --remote vendor/ltk-manager
+
+# Rebuild with new repair rules
+cargo build --release
+```
+*(An automated GitHub Actions workflow [`.github/workflows/update-upstream.yml`](.github/workflows/update-upstream.yml) also checks for upstream updates every Wednesday after League patches and automatically tests and opens a PR).*
+
 ---
 
 ## Usage
