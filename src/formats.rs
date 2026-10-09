@@ -86,15 +86,35 @@ impl ModFormat {
 ///
 /// An extracted Fantome mod has:
 /// - A `META` directory containing `info.json`
-/// - A `WAD` directory (containing `.wad.client` files)
+/// - Mod assets or directories (`WAD`, `RAW`, `DATA`, etc.)
 pub fn is_fantome_folder(path: &Path) -> bool {
     if !path.is_dir() {
         return false;
     }
     let has_meta_info = path.join("META").join("info.json").is_file()
         || path.join("meta").join("info.json").is_file();
-    let has_wad = path.join("WAD").exists() || path.join("wad").exists();
-    has_meta_info && has_wad
+    if !has_meta_info {
+        return false;
+    }
+    let has_mod_content = path.join("WAD").exists()
+        || path.join("wad").exists()
+        || path.join("RAW").exists()
+        || path.join("raw").exists()
+        || path.join("DATA").exists()
+        || path.join("data").exists();
+    if has_mod_content {
+        return true;
+    }
+    // Fallback: check if there is any other non-metadata entry
+    if let Ok(entries) = fs_err::read_dir(path) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let name = entry.file_name().to_string_lossy().to_ascii_uppercase();
+            if name != "META" && !crate::cleanup::is_os_metadata_file(&name) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn is_fantome_zip(path: &Path) -> bool {
@@ -105,13 +125,18 @@ fn is_fantome_zip(path: &Path) -> bool {
         return false;
     };
 
-    // Check if zip contains META/info.json or WAD/ or RAW/
+    // Check if zip contains META/info.json or WAD/ or RAW/ or DATA/ (top-level or inside subfolder)
     for i in 0..archive.len() {
         if let Ok(entry) = archive.by_index(i) {
-            let name = entry.name().to_ascii_uppercase();
-            if name.starts_with("META/INFO.JSON")
+            let name = entry.name().to_ascii_uppercase().replace('\\', "/");
+            if name.ends_with("META/INFO.JSON")
+                || name.starts_with("META/INFO.JSON")
+                || name.contains("/WAD/")
                 || name.starts_with("WAD/")
+                || name.contains("/RAW/")
                 || name.starts_with("RAW/")
+                || name.contains("/DATA/")
+                || name.starts_with("DATA/")
             {
                 return true;
             }

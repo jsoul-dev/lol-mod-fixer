@@ -393,6 +393,27 @@ pub fn beautify_and_sync_folder(mod_dir: &Path) -> FixerResult<Option<PathBuf>> 
             }
         }
     }
+
+    // If no WAD files, inspect RAW/DATA character paths (e.g. RAW/ASSETS/Characters/Shyvana)
+    if wad_names.is_empty() {
+        let raw_dir = mod_dir.join("RAW");
+        let raw_dir_lower = mod_dir.join("raw");
+        let active_raw_dir = if raw_dir.is_dir() {
+            Some(raw_dir)
+        } else if raw_dir_lower.is_dir() {
+            Some(raw_dir_lower)
+        } else {
+            None
+        };
+
+        if let Some(rdir) = active_raw_dir {
+            for entry in walkdir::WalkDir::new(&rdir).max_depth(4).into_iter().flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    wad_names.push(name.to_string());
+                }
+            }
+        }
+    }
     let wad_refs: Vec<&str> = wad_names.iter().map(|s| s.as_str()).collect();
 
     // Compute target beautified name

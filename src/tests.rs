@@ -1451,6 +1451,84 @@ fn test_rose_manifest_sync_when_mods_pasted() {
     assert_eq!(synced_again, 0, "Second sync must be a no-op since manifest is up to date");
 }
 
+#[test]
+fn test_raw_fantome_folder_detection_and_beautification() {
+    let temp = TempDir::new().unwrap();
+    let skin_dir = temp.path().join("102000");
+    fs_err::create_dir_all(&skin_dir).unwrap();
+
+    // Create Blossom Lizard Shyvana with META and RAW
+    let mod_dir = skin_dir.join("Blossom Lizard Shyvana");
+    fs_err::create_dir_all(mod_dir.join("META")).unwrap();
+    fs_err::write(
+        mod_dir.join("META").join("info.json"),
+        r#"{ "Name": "Shyvana", "Author": "Abdomera", "Version": "1.0" }"#,
+    )
+    .unwrap();
+    fs_err::create_dir_all(mod_dir.join("RAW").join("ASSETS").join("Characters").join("Shyvana")).unwrap();
+    fs_err::write(
+        mod_dir.join("RAW").join("ASSETS").join("Characters").join("Shyvana").join("test.dds"),
+        "dummy dds bytes",
+    )
+    .unwrap();
+
+    // Verify format detection recognizes it as FantomeFolder
+    assert!(crate::formats::is_fantome_folder(&mod_dir));
+    assert_eq!(crate::formats::ModFormat::detect(&mod_dir), crate::formats::ModFormat::FantomeFolder);
+
+    // Run beautify_and_sync_folder
+    let new_path = crate::beautify::beautify_and_sync_folder(&mod_dir).unwrap();
+    assert!(new_path.is_some());
+    let beautified_path = new_path.unwrap();
+    assert_eq!(
+        beautified_path.file_name().unwrap().to_string_lossy(),
+        "Blossom Lizard Shyvana v1.0"
+    );
+    assert!(beautified_path.exists());
+    assert!(!mod_dir.exists());
+
+    // Also test Fenrir Warwick
+    let ww_skin_dir = temp.path().join("19000");
+    fs_err::create_dir_all(&ww_skin_dir).unwrap();
+    let ww_mod = ww_skin_dir.join("Fenrir Warwick");
+    fs_err::create_dir_all(ww_mod.join("META")).unwrap();
+    fs_err::write(
+        ww_mod.join("META").join("info.json"),
+        r#"{ "Name": "Warwick Fenrir", "Author": "Abdomera", "Version": "1.0" }"#,
+    )
+    .unwrap();
+    fs_err::create_dir_all(ww_mod.join("RAW")).unwrap();
+    fs_err::write(ww_mod.join("RAW").join("data.bin"), "data").unwrap();
+
+    assert!(crate::formats::is_fantome_folder(&ww_mod));
+    let ww_new = crate::beautify::beautify_and_sync_folder(&ww_mod).unwrap().unwrap();
+    assert_eq!(
+        ww_new.file_name().unwrap().to_string_lossy(),
+        "Fenrir Warwick v1.0"
+    );
+
+    // Also test Nude Morgana
+    let morg_skin_dir = temp.path().join("25000");
+    fs_err::create_dir_all(&morg_skin_dir).unwrap();
+    let morg_mod = morg_skin_dir.join("Nude Morgana");
+    fs_err::create_dir_all(morg_mod.join("META")).unwrap();
+    fs_err::write(
+        morg_mod.join("META").join("info.json"),
+        r#"{ "Name": "Base Morgana Female", "Author": "Onothera", "Version": "1.0" }"#,
+    )
+    .unwrap();
+    fs_err::create_dir_all(morg_mod.join("RAW")).unwrap();
+    fs_err::write(morg_mod.join("RAW").join("data.bin"), "data").unwrap();
+
+    assert!(crate::formats::is_fantome_folder(&morg_mod));
+    let morg_new = crate::beautify::beautify_and_sync_folder(&morg_mod).unwrap().unwrap();
+    assert_eq!(
+        morg_new.file_name().unwrap().to_string_lossy(),
+        "Nude Morgana v1.0"
+    );
+}
+
+
 
 
 
