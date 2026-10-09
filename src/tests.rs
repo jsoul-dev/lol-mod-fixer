@@ -1522,6 +1522,62 @@ fn test_raw_fantome_folder_detection_and_beautification() {
     );
 }
 
+#[test]
+fn test_non_mod_files_and_documents_ignored_and_untouched() {
+    let temp = tempfile::tempdir().unwrap();
+    let docs_dir = temp.path().join("Documents");
+    fs_err::create_dir_all(&docs_dir).unwrap();
+
+    // 1. Create a simulated docx file (which is a zip internally)
+    let docx_path = docs_dir.join("Endorsement-for-Defense.docx");
+    {
+        let file = fs_err::File::create(&docx_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file("word/document.xml", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut zip, b"<xml>Thesis defense</xml>").unwrap();
+        zip.finish().unwrap();
+    }
+
+    // 2. Create generic other non-mod files
+    let pdf_path = docs_dir.join("Guide.pdf");
+    fs_err::write(&pdf_path, b"%PDF-1.4 simulated pdf").unwrap();
+
+    let generic_zip = docs_dir.join("homework.zip");
+    {
+        let file = fs_err::File::create(&generic_zip).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file("notes.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut zip, b"Study notes").unwrap();
+        zip.finish().unwrap();
+    }
+
+    // Verify format detection explicitly rejects all of them
+    assert_eq!(
+        crate::formats::ModFormat::detect(&docx_path),
+        crate::formats::ModFormat::Unsupported
+    );
+    assert_eq!(
+        crate::formats::ModFormat::detect(&pdf_path),
+        crate::formats::ModFormat::Unsupported
+    );
+    assert_eq!(
+        crate::formats::ModFormat::detect(&generic_zip),
+        crate::formats::ModFormat::Unsupported
+    );
+
+    // Verify candidate file detection rejects all of them
+    assert!(!crate::scanner::is_candidate_file(&docx_path));
+    assert!(!crate::scanner::is_candidate_file(&pdf_path));
+    assert!(!crate::scanner::is_candidate_file(&generic_zip));
+
+    // Verify scanner finds 0 mods in this directory
+    let found = crate::scanner::scan_directory(&docs_dir, true).unwrap();
+    assert!(found.is_empty(), "Expected 0 candidates, found: {:?}", found);
+}
+
+
 
 
 

@@ -77,8 +77,13 @@ impl Printer {
         if self.json {
             return;
         }
-        println!("{}", "League Mod Fixer (LTK Repair Engine)".cyan().bold());
-        println!("{}", "====================================".dark_cyan());
+        let title = format!(
+            "League Mod Fixer v{} (LTK Repair Engine)",
+            env!("CARGO_PKG_VERSION")
+        );
+        let border = "=".repeat(title.chars().count());
+        println!("{}", title.cyan().bold());
+        println!("{}", border.dark_cyan());
         if let Some(d) = dir {
             println!("Directory: {}", d.display().to_string().white().bold());
         }

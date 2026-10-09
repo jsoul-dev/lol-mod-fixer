@@ -58,22 +58,28 @@ impl ModFormat {
             match ext.to_ascii_lowercase().as_str() {
                 "fantome" => return Self::Fantome,
                 "modpkg" => return Self::Modpkg,
-                "zip" if is_fantome_zip(path) => return Self::Fantome,
-                _ => {}
+                "zip" => {
+                    if is_fantome_zip(path) {
+                        return Self::Fantome;
+                    }
+                    return Self::Unsupported;
+                }
+                // Known non-mod extensions: never treat as mod
+                _ => return Self::Unsupported,
             }
         }
 
-        // Sniff first few bytes if file exists
+        // For extensionless files only, sniff magic with strict validation
         if let Ok(mut file) = File::open(path) {
             let mut magic = [0u8; 4];
             if file.read_exact(&mut magic).is_ok() {
-                // Zip signature PK\x03\x04
-                if magic == [0x50, 0x4B, 0x03, 0x04] {
-                    return Self::Fantome;
-                }
                 // WAD signature "RW4\x00" - "RW4\x03"
                 if magic[0..3] == [0x52, 0x57, 0x34] {
                     return Self::WadClient;
+                }
+                // Zip signature PK\x03\x04 - ONLY if it verified contains Fantome mod structure
+                if magic == [0x50, 0x4B, 0x03, 0x04] && is_fantome_zip(path) {
+                    return Self::Fantome;
                 }
             }
         }

@@ -260,7 +260,7 @@ pub fn looks_like_mod_folder(folder: &Path) -> bool {
     if let Ok(entries) = fs_err::read_dir(folder) {
         for entry in entries.filter_map(|e| e.ok()) {
             let name = entry.file_name().to_string_lossy().to_ascii_uppercase();
-            if name == "META" || name == "WAD" || name == "RAW" {
+            if name == "META" || name == "WAD" || name == "RAW" || name == "DATA" {
                 return true;
             }
         }

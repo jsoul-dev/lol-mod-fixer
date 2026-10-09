@@ -40,18 +40,18 @@ pub fn is_candidate_file(path: &Path) -> bool {
         return false;
     }
 
-    // Ignore typical non-mod file extensions
-    let non_mod_exts = [
-        "exe", "dll", "txt", "json", "log", "png", "jpg", "jpeg", "webp", "ini", "toml", "yml",
-        "yaml", "md",
-    ];
-    if let Some(ext) = path.extension().and_then(|s| s.to_str())
-        && non_mod_exts.contains(&ext.to_ascii_lowercase().as_str())
-    {
+    // Only allow files with recognized League mod extensions
+    let is_mod_extension = file_name.ends_with(".fantome")
+        || file_name.ends_with(".modpkg")
+        || file_name.ends_with(".wad.client")
+        || file_name.ends_with(".wad")
+        || file_name.ends_with(".zip");
+
+    if !is_mod_extension {
         return false;
     }
 
-    // Check if it matches known format
+    // Check if it matches known format (and for .zip, validates internal structure)
     let format = ModFormat::detect(path);
     format != ModFormat::Unsupported
 }
