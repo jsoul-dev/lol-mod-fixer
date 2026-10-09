@@ -22,13 +22,35 @@ echo  League Mod Fixer - Standalone LTK Manager Repair Engine
 echo ======================================================================
 echo.
 
-if exist "%~dp0lol-mod-fixer.exe" (
-    "%~dp0lol-mod-fixer.exe" repair --pause %*
+set "EXE="
+
+if exist "%~dp0lol-mod-fixer-static.exe" (
+    set "EXE=%~dp0lol-mod-fixer-static.exe"
+) else if exist "%~dp0lol-mod-fixer.exe" (
+    set "EXE=%~dp0lol-mod-fixer.exe"
+) else if exist "%~dp0lol-mod-fixer-dynamic.exe" (
+    set "EXE=%~dp0lol-mod-fixer-dynamic.exe"
+) else if exist "%~dp0..\lol-mod-fixer-static.exe" (
+    set "EXE=%~dp0..\lol-mod-fixer-static.exe"
 ) else if exist "%~dp0..\lol-mod-fixer.exe" (
-    "%~dp0..\lol-mod-fixer.exe" repair --pause %*
+    set "EXE=%~dp0..\lol-mod-fixer.exe"
+) else if exist "%~dp0..\lol-mod-fixer-dynamic.exe" (
+    set "EXE=%~dp0..\lol-mod-fixer-dynamic.exe"
 ) else if exist "%~dp0..\dist\lol-mod-fixer-static.exe" (
-    "%~dp0..\dist\lol-mod-fixer-static.exe" repair --pause %*
+    set "EXE=%~dp0..\dist\lol-mod-fixer-static.exe"
 ) else (
-    echo Error: lol-mod-fixer.exe was not found in "%~dp0" or parent directory.
+    for %%F in ("%~dp0lol-mod-fixer*.exe") do (
+        set "EXE=%%F"
+    )
+)
+
+if defined EXE (
+    "%EXE%" repair --pause %*
+) else (
+    echo Error: Could not find lol-mod-fixer-static.exe or lol-mod-fixer.exe in:
+    echo   "%~dp0"
+    echo.
+    echo Please make sure lol-mod-fixer-static.exe is placed in the same folder as this script.
+    echo.
     pause
 )
