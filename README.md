@@ -57,14 +57,19 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 
 ## Installation & Builds
 
-### Pre-Built Binaries
-The `dist/` directory provides two release variants:
+### Pre-Built Binaries: Which One Should You Download?
 
-1. **`dist/lol-mod-fixer-static.exe`** *(Recommended)*:
-   - Statically links the C runtime (`+crt-static`).
-   - Completely standalone: runs on any Windows 10/11 PC with **zero dependencies**.
-2. **`dist/lol-mod-fixer-dynamic.exe`**:
-   - Standard dynamic MSVC build linking against `vcruntime140.dll`.
+The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest) provides two executable variants:
+
+1. **`lol-mod-fixer-static.exe`** *(Recommended for 99% of Users)*:
+   - Compiles with statically linked C runtime (`/MT` via `+crt-static`).
+   - **Completely standalone**: runs out of the box on any clean Windows 10/11 system with **zero dependencies**—no Microsoft Visual C++ Redistributable (`vcruntime140.dll`), .NET, Python, or external runtimes required.
+   - You will never encounter *"The code execution cannot proceed because VCRUNTIME140.dll was not found"*.
+2. **`lol-mod-fixer-dynamic.exe`**:
+   - Standard MSVC dynamic runtime build (`/MD`), which links against the system's `vcruntime140.dll`.
+   - Requires Microsoft Visual C++ 2015–2022 Redistributable installed on Windows.
+   - Only choose this if you specifically manage shared Visual C++ runtimes system-wide.
+   - *Note: Both variants contain identical features, performance, and repair logic (the ~5 KB difference between them is solely the embedded CRT glue code).*
 
 ### Building from Source
 
@@ -102,7 +107,44 @@ When running inside recent Rose installations that apply restrictive folder perm
 - Automatically prompts for UAC elevation, unlocks restricted NTFS permissions, repairs all mods, beautifies folder names, and synchronizes `rose_mod_targets.json`.
 - Forwards any CLI arguments passed to it (e.g. `run-fixer-as-admin.bat --no-beautify`).
 
-### 3. Health Check Mode (`check`)
+### 3. How to Use with Rose (Fix Already-Imported Skins)
+
+Rose extracts and organizes all installed custom skins inside the user's Local AppData directory:
+```text
+%LOCALAPPDATA%\Rose\mods\skins
+(e.g., C:\Users\<YourUsername>\AppData\Local\Rose\mods\skins)
+```
+
+To repair, clean, and organize all skins already imported into Rose:
+
+#### Method A: Drop & Double-Click (Recommended)
+1. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
+2. Copy `lol-mod-fixer-static.exe` and `run-fixer-as-admin.bat` into that `skins` folder.
+3. Right-click `run-fixer-as-admin.bat` $\rightarrow$ **Run as administrator** (or double-click `lol-mod-fixer-static.exe` directly).
+4. `lol-mod-fixer` will automatically:
+   - Recursively scan all champion skin folders (e.g., `106000`, `33000`, `34000`).
+   - Repair broken BIN properties, outdated sound bank IDs, and format errors in-place.
+   - Auto-beautify mod folder names into `<Mod Skin Name> <Champion> v<Version>`.
+   - Update Rose's `rose_mod_targets.json` manifests so Rose detects the updated mod names instantly.
+   - Generate `skin_mappings.txt` and `skin_mappings.json` for easy reference.
+   - Clean up any empty folders and orphan manifests.
+   - Pause with a clean summary so you can review the results.
+
+#### Method B: Run via Command Line / PowerShell (From Anywhere)
+You can also run the fixer against Rose's skins directory directly from any terminal using the `%LOCALAPPDATA%` environment variable:
+
+```powershell
+# Repair and beautify all imported skins in Rose:
+lol-mod-fixer.exe repair "$env:LOCALAPPDATA\Rose\mods\skins" -r
+
+# Or repair without renaming folders (keep original folder names):
+lol-mod-fixer.exe repair "$env:LOCALAPPDATA\Rose\mods\skins" -r --no-beautify
+
+# Perform a safe diagnostic check without modifying any files:
+lol-mod-fixer.exe check "$env:LOCALAPPDATA\Rose\mods\skins" -r
+```
+
+### 4. Health Check Mode (`check`)
 Inspect a single archive or directory without modifying any files:
 ```bash
 # Check a single mod archive
@@ -121,7 +163,7 @@ lol-mod-fixer check "C:\Mods\Ahri.fantome" -v
 lol-mod-fixer check "C:\Mods\Ahri.fantome" --json
 ```
 
-### 4. Repair Mode (`repair`)
+### 5. Repair Mode (`repair`)
 Repair a mod archive, extracted mod folder, or all mods in a directory:
 ```bash
 # Repair an archive in-place
@@ -140,13 +182,13 @@ lol-mod-fixer repair "C:\Mods\Ahri.fantome" --backup
 lol-mod-fixer repair "C:\Mods" --dry-run
 ```
 
-### 5. Automatic Mode (`auto`)
+### 6. Automatic Mode (`auto`)
 Checks health, prints diagnostics, repairs when possible, and verifies the repaired output:
 ```bash
 lol-mod-fixer auto "C:\Mods\Ahri.fantome"
 ```
 
-### 6. Disabling Beautification (`--no-beautify`)
+### 7. Disabling Beautification (`--no-beautify`)
 If you or your users prefer to keep the original, raw mod folder names untouched:
 ```bash
 # Run with beautification disabled
@@ -157,7 +199,7 @@ lol-mod-fixer.exe repair "C:\Users\Admin\AppData\Local\Rose\mods\skins" --no-bea
 ```
 *(You can also create a Windows shortcut to `lol-mod-fixer.exe` and add ` --no-beautify` to the Target field).*
 
-### 7. Configuration (`config`)
+### 8. Configuration (`config`)
 Manage persistent tool settings stored in `%APPDATA%\LeagueToolkit\LoLModFixer\config\config.json`:
 ```bash
 # View current configuration and detected League paths
