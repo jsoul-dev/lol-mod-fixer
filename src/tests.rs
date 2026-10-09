@@ -730,6 +730,12 @@ fn test_beautify_all_user_examples() {
     );
     assert_eq!(res9, "Shadow The Hedgehog Ekko v1.1.3");
 
+    // Example 10: Vi Deku (champion first) -> Deku Vi v1.0
+    let res10 = compute_beautified_title("Vi Deku", Some("254000"), None, None, &[]);
+    assert_eq!(res10, "Deku Vi v1.0");
+    let res10_inferred = compute_beautified_title("Vi Deku", None, None, None, &[]);
+    assert_eq!(res10_inferred, "Deku Vi v1.0");
+
     // Idempotency: Running beautification on already-beautified titles MUST remain unchanged
     let all_beautified = [
         (&res1, "33000"),
@@ -741,6 +747,7 @@ fn test_beautify_all_user_examples() {
         (&res7, "106000"),
         (&res8, "120000"),
         (&res9, "245000"),
+        (&res10, "254000"),
     ];
     for (title, parent_id) in all_beautified {
         let idempotent = compute_beautified_title(title, Some(parent_id), None, None, &[]);
