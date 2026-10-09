@@ -19,14 +19,14 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - Formats all mod and folder names into clean, client-friendly titles:
     `<Mod Skin Name> <Champion Name> v<Version>`
   - Examples:
-    - `Sonic_Rammus-1.0.0` $\rightarrow$ `Sonic Rammus v1.0`
-    - `Rammus_Sonic-1.0.0` $\rightarrow$ `Sonic Rammus v1.0` *(always skin name first, champion second)*
-    - `tank-volibear` $\rightarrow$ `Tank Volibear v1.0` *(automatic title casing)*
-    - `Angel-v1.0.0` $\rightarrow$ `Angel Volibear v1.0` *(auto-detects champion from skin ID `106000`)*
-    - `Chun_Li_Garen-2.0` $\rightarrow$ `Chun Li Garen v2.0`
-    - `Ansem_Malzahar-Main` $\rightarrow$ `Ansem Malzahar v1.1.2` *(resolves true version from `info.json`)*
-    - `Zacian_Hecarim-1.1.0` $\rightarrow$ `Zacian Hecarim v1.1`
-    - `Shadow_The_Hedgehog__Ekko_-1.1.3` $\rightarrow$ `Shadow The Hedgehog Ekko v1.1.3`
+    - `Sonic_Rammus-1.0.0` → `Sonic Rammus v1.0`
+    - `Rammus_Sonic-1.0.0` → `Sonic Rammus v1.0` *(always skin name first, champion second)*
+    - `tank-volibear` → `Tank Volibear v1.0` *(automatic title casing)*
+    - `Angel-v1.0.0` → `Angel Volibear v1.0` *(auto-detects champion from skin ID `106000`)*
+    - `Chun_Li_Garen-2.0` → `Chun Li Garen v2.0`
+    - `Ansem_Malzahar-Main` → `Ansem Malzahar v1.1.2` *(resolves true version from `info.json`)*
+    - `Zacian_Hecarim-1.1.0` → `Zacian Hecarim v1.1`
+    - `Shadow_The_Hedgehog__Ekko_-1.1.3` → `Shadow The Hedgehog Ekko v1.1.3`
   - Fully idempotent: already-beautified mods remain untouched.
   - Can be disabled at any time with `--no-beautify`.
 - **Automatic Empty Folder & Orphan Manifest Cleanup (ON by Default)**:
@@ -41,7 +41,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - Can be disabled at any time with `--no-mapping`.
 - **Embedded Offline League Champion & Skin Database**:
   - Bundles 9,303 official skin IDs from `Alban1911/LeagueSkins`.
-  - Accurately identifies champions using parent folder Skin IDs (`106000` $\rightarrow$ Volibear, `33000` $\rightarrow$ Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
+  - Accurately identifies champions using parent folder Skin IDs (`106000` → Volibear, `33000` → Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
 - **Rose Mod Manager Integration**:
   - **Legacy & Raw Archive Auto-Migration (ON by Default)**: Automatically detects outdated or raw archives (`.fantome`, `.zip`, and `.modpkg`) placed directly inside numeric skin target folders without being extracted. Safely extracts archives (converting `.modpkg` binary packages via LTK project unpacking into clean Rose layout), flattens redundant wrapper folders, validates files, unlinks original archives, and builds `rose_mod_targets.json` with exact `folderHash` and `wadHashes` so mods inject properly in Rose client and Party Mode. Already updated structures are left completely untouched. (Disable with `--no-migrate`).
   - **Extracted Mod Folder Support**: Directly supports `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` structures.
@@ -114,7 +114,7 @@ lol-mod-fixer.exe
 
 ### 2. Administrator Launcher Script (`scripts/run-fixer-as-admin.bat`)
 When running inside recent Rose installations that apply restrictive folder permissions:
-- Right-click `scripts/run-fixer-as-admin.bat` (or the one included in release packages) $\rightarrow$ **Run as administrator**.
+- Right-click `scripts/run-fixer-as-admin.bat` (or the one included in release packages) → **Run as administrator**.
 - Automatically prompts for UAC elevation, unlocks restricted NTFS permissions, repairs all mods, beautifies folder names, and synchronizes `rose_mod_targets.json`.
 - Forwards any CLI arguments passed to it (e.g. `run-fixer-as-admin.bat --no-beautify`).
 
@@ -131,7 +131,7 @@ To repair, clean, and organize all skins already imported into Rose:
 #### Method A: Drop & Double-Click (Recommended)
 1. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
 2. Copy `lol-mod-fixer-static.exe` and `run-fixer-as-admin.bat` into that `skins` folder.
-3. Right-click `run-fixer-as-admin.bat` $\rightarrow$ **Run as administrator** (or double-click `lol-mod-fixer-static.exe` directly).
+3. Right-click `run-fixer-as-admin.bat` → **Run as administrator** (or double-click `lol-mod-fixer-static.exe` directly).
 4. `lol-mod-fixer` will automatically:
    - Recursively scan all champion skin folders (e.g., `106000`, `33000`, `34000`).
    - Repair broken BIN properties, outdated sound bank IDs, and format errors in-place.
