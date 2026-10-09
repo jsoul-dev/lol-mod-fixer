@@ -35,6 +35,8 @@ pub enum RepairResult {
         path: PathBuf,
         format: ModFormat,
         reason: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quarantined: Option<PathBuf>,
         #[serde(default)]
         deleted: bool,
     },
@@ -49,6 +51,8 @@ pub enum RepairResult {
         path: PathBuf,
         format: ModFormat,
         error: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quarantined: Option<PathBuf>,
         #[serde(default)]
         deleted: bool,
     },
@@ -57,6 +61,24 @@ pub enum RepairResult {
 impl RepairResult {
     pub fn is_repaired(&self) -> bool {
         matches!(self, Self::Repaired { .. })
+    }
+
+    #[allow(dead_code)]
+    pub fn is_quarantined(&self) -> bool {
+        match self {
+            Self::Unrepairable { quarantined, .. } | Self::Failed { quarantined, .. } => {
+                quarantined.is_some()
+            }
+            _ => false,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_deleted(&self) -> bool {
+        match self {
+            Self::Unrepairable { deleted, .. } | Self::Failed { deleted, .. } => *deleted,
+            _ => false,
+        }
     }
 
     pub fn is_unchanged(&self) -> bool {
@@ -97,6 +119,7 @@ pub fn repair_mod_archive(
                 reason: "A .modpkg is read straight out of its archive and has no unpacked form. \
                          LTK Manager does not support modifying or repairing .modpkg archives."
                     .to_string(),
+                quarantined: None,
                 deleted: false,
             }),
             ModFormat::WadClient => Ok(RepairResult::Unsupported {
@@ -132,6 +155,7 @@ pub fn repair_mod_archive(
                 reason: initial_health.reason.unwrap_or_else(|| {
                     "Detected problems cannot be repaired automatically.".to_string()
                 }),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -142,6 +166,7 @@ pub fn repair_mod_archive(
                 error: initial_health
                     .reason
                     .unwrap_or_else(|| "Archive is corrupted or unreadable.".to_string()),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -159,6 +184,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: "Hashtable cache or game metadata unavailable.".to_string(),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -218,6 +244,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("Failed to read extracted mod folder: {e}"),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -234,6 +261,7 @@ pub fn repair_mod_archive(
                     path: input.to_path_buf(),
                     format,
                     error: format!("Failed to import mod into temporary library: {e}"),
+                    quarantined: None,
                     deleted: false,
                 });
             }
@@ -247,6 +275,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("LTK repair engine error: {e}"),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -271,6 +300,7 @@ pub fn repair_mod_archive(
             path: input.to_path_buf(),
             format,
             error: format!("Exporting repaired mod failed: {e}"),
+            quarantined: None,
             deleted: false,
         });
     }
@@ -294,6 +324,7 @@ pub fn repair_mod_archive(
                 "Verification failed: repaired archive is invalid ({})",
                 post_health.reason.as_deref().unwrap_or("unknown error")
             ),
+            quarantined: None,
             deleted: false,
         });
     }
@@ -314,6 +345,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("Failed to unpack repaired archive: {e}"),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -322,6 +354,7 @@ pub fn repair_mod_archive(
                 path: input.to_path_buf(),
                 format,
                 error: format!("Failed to save repaired folder: {e}"),
+                quarantined: None,
                 deleted: false,
             });
         }
@@ -335,6 +368,7 @@ pub fn repair_mod_archive(
             path: input.to_path_buf(),
             format,
             error: format!("Failed to save repaired file: {e}"),
+            quarantined: None,
             deleted: false,
         });
     }

@@ -7,6 +7,7 @@ pub mod champions;
 pub mod cleanup;
 pub mod mapping;
 pub mod migrate;
+pub mod quarantine;
 mod cli;
 mod config;
 mod engine;
@@ -156,7 +157,8 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
     let cleanup = !cli.no_cleanup;
     let mapping = !cli.no_mapping;
     let migrate = !cli.no_migrate;
-    let delete_unrepairable = !cli.no_delete_unrepairable;
+    let quarantine = !cli.no_quarantine && !cli.no_delete_unrepairable;
+    let delete_unrepairable = cli.delete_unrepairable;
 
     match cli.command {
         Some(Commands::Check(args)) => {
@@ -179,7 +181,8 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let c = if args.no_cleanup { false } else { cleanup };
             let m = if args.no_mapping { false } else { mapping };
             let mig = if args.no_migrate { false } else { migrate };
-            let del = if args.no_delete_unrepairable { false } else { delete_unrepairable };
+            let quaran = if args.no_quarantine || args.no_delete_unrepairable { false } else { quarantine };
+            let del = if args.delete_unrepairable { true } else { delete_unrepairable };
             execute_repair(
                 input,
                 output,
@@ -191,6 +194,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 c,
                 m,
                 mig,
+                quaran,
                 del,
                 &repair_printer,
             )
@@ -207,7 +211,8 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let c = if args.no_cleanup { false } else { cleanup };
             let m = if args.no_mapping { false } else { mapping };
             let mig = if args.no_migrate { false } else { migrate };
-            let del = if args.no_delete_unrepairable { false } else { delete_unrepairable };
+            let quaran = if args.no_quarantine || args.no_delete_unrepairable { false } else { quarantine };
+            let del = if args.delete_unrepairable { true } else { delete_unrepairable };
             execute_repair(
                 input,
                 output,
@@ -219,6 +224,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 c,
                 m,
                 mig,
+                quaran,
                 del,
                 &repair_printer,
             )
@@ -236,7 +242,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let dry_run = cli.dry_run;
             let recursive = true;
             execute_repair(
-                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, migrate, delete_unrepairable, printer,
+                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, migrate, quarantine, delete_unrepairable, printer,
             )
         }
     }

@@ -289,6 +289,9 @@ pub fn rebuild_target_manifest(target_folder: &Path, target: u32) -> FixerResult
     }
 
     if mod_folders.is_empty() {
+        if json_path.exists() {
+            let _ = fs_err::remove_file(&json_path);
+        }
         return Ok(false);
     }
 

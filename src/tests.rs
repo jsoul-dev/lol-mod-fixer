@@ -1216,7 +1216,8 @@ fn test_delete_unrepairable_and_update_manifests() {
         true,
         true,
         false,
-        true, // delete_unrepairable
+        false, // quarantine
+        true,  // delete_unrepairable
         &printer,
     ).unwrap();
 
@@ -1235,6 +1236,79 @@ fn test_delete_unrepairable_and_update_manifests() {
     // Mappings must only contain Gladiator Draven
     let summary = crate::mapping::generate_skin_mappings(&skins_dir).unwrap().unwrap();
     assert_eq!(summary.total_mods, 1);
+}
+
+#[test]
+fn test_quarantine_unrepairable_and_update_manifests() {
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path().join("skins");
+    let target_dir = skins_dir.join("119000"); // Draven
+    fs_err::create_dir_all(&target_dir).unwrap();
+
+    // 1. Create a corrupted/broken archive
+    let corrupt_file = target_dir.join("draven-shaco-thrower_1.0.0.fantome");
+    fs_err::write(&corrupt_file, b"corrupted-invalid-checksum-zip").unwrap();
+
+    // 2. Create a healthy mod folder alongside it
+    let healthy_archive = temp.path().join("Gladiator Draven.fantome");
+    make_packed_bin_fantome_zip(
+        &healthy_archive,
+        "Gladiator Draven",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+    let healthy_mod = target_dir.join("Gladiator Draven v1.0");
+    crate::formats::unpack_fantome_archive(&healthy_archive, &healthy_mod).unwrap();
+
+    // Build initial Rose manifest
+    let _ = crate::migrate::rebuild_target_manifest(&target_dir, 119000).unwrap();
+    assert!(target_dir.join("rose_mod_targets.json").exists());
+
+    // Execute repair with quarantine: true, delete_unrepairable: false (default behavior)
+    let printer = crate::output::Printer::new(false, false);
+    let _ = crate::engine::execute_repair(
+        Some(skins_dir.clone()),
+        None,
+        None,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,  // quarantine
+        false, // delete_unrepairable
+        &printer,
+    ).unwrap();
+
+    // Corrupted file must NO LONGER be in target_dir (119000)
+    assert!(!corrupt_file.exists(), "Corrupted archive must be removed from target directory");
+
+    // Corrupted file must be safely preserved in .broken/119000/
+    let broken_file = skins_dir
+        .join(".broken")
+        .join("119000")
+        .join("draven-shaco-thrower_1.0.0.fantome");
+    assert!(broken_file.exists(), "Corrupted archive must be safely quarantined into .broken/");
+
+    // Healthy mod should still exist in 119000
+    assert!(healthy_mod.exists(), "Healthy mod must be preserved");
+
+    // Manifest must contain only healthy mod
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(target_dir.join("rose_mod_targets.json")).unwrap()).unwrap();
+    let mods = manifest["mods"].as_object().unwrap();
+    assert_eq!(mods.len(), 1);
+
+    // Mappings must only contain Gladiator Draven and completely ignore .broken
+    let summary = crate::mapping::generate_skin_mappings(&skins_dir).unwrap().unwrap();
+    assert_eq!(summary.total_mods, 1);
+
+    // Rescan must not scan .broken directory
+    let rescan = crate::scanner::scan_directory(&skins_dir, true).unwrap();
+    assert_eq!(rescan.len(), 1);
+    assert_eq!(rescan[0], healthy_mod);
 }
 
 

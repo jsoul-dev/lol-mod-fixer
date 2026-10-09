@@ -50,6 +50,8 @@ pub struct JsonRepairModItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub quarantined: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted: Option<bool>,
 }
 
@@ -213,6 +215,7 @@ impl Printer {
                 path,
                 format,
                 reason,
+                quarantined,
                 deleted,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -222,7 +225,11 @@ impl Printer {
                     name.white().bold()
                 );
                 println!("      Format: {}", format.display_name().dark_grey());
-                if *deleted {
+                if let Some(q_path) = quarantined {
+                    println!("      Status: {}", "UNREPAIRABLE (QUARANTINED)".yellow().bold());
+                    println!("      Reason: {}", reason.as_str().yellow());
+                    println!("      Quarantined: {}", format!("Moved to {}", q_path.display()).cyan());
+                } else if *deleted {
                     println!("      Status: {}", "UNREPAIRABLE (CLEANED)".red().bold());
                     println!("      Reason: {}", reason.as_str().yellow());
                     println!("      {}", "Deleted unrepairable mod to prevent game crashes.".red());
@@ -252,6 +259,7 @@ impl Printer {
                 path,
                 format,
                 error,
+                quarantined,
                 deleted,
             } => {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -261,7 +269,11 @@ impl Printer {
                     name.white().bold()
                 );
                 println!("      Format: {}", format.display_name().dark_grey());
-                if *deleted {
+                if let Some(q_path) = quarantined {
+                    println!("      Status: {}", "CORRUPTED / FAILED (QUARANTINED)".red().bold());
+                    println!("      Reason: {}", error.as_str().red());
+                    println!("      Quarantined: {}", format!("Moved to {}", q_path.display()).cyan());
+                } else if *deleted {
                     println!("      Status: {}", "CORRUPTED / FAILED (CLEANED)".red().bold());
                     println!("      Reason: {}", error.as_str().red());
                     println!("      {}", "Deleted broken/corrupted file to prevent game crashes.".red());
@@ -385,6 +397,7 @@ impl Printer {
                         fixes_applied: Some(0),
                         reason: None,
                         error: None,
+                        quarantined: None,
                         deleted: None,
                     },
                     RepairResult::Repaired {
@@ -402,22 +415,25 @@ impl Printer {
                         fixes_applied: Some(*fixes_applied),
                         reason: None,
                         error: None,
+                        quarantined: None,
                         deleted: None,
                     },
                     RepairResult::Unrepairable {
                         path,
                         format,
                         reason,
+                        quarantined,
                         deleted,
                     } => JsonRepairModItem {
                         path: path.display().to_string(),
                         format: *format,
                         status: "unrepairable".to_string(),
-                        modified: *deleted,
+                        modified: *deleted || quarantined.is_some(),
                         output_path: None,
                         fixes_applied: None,
                         reason: Some(reason.clone()),
                         error: None,
+                        quarantined: quarantined.as_ref().map(|p| p.display().to_string()),
                         deleted: if *deleted { Some(true) } else { None },
                     },
                     RepairResult::Unsupported {
@@ -433,22 +449,25 @@ impl Printer {
                         fixes_applied: None,
                         reason: Some(reason.clone()),
                         error: None,
+                        quarantined: None,
                         deleted: None,
                     },
                     RepairResult::Failed {
                         path,
                         format,
                         error,
+                        quarantined,
                         deleted,
                     } => JsonRepairModItem {
                         path: path.display().to_string(),
                         format: *format,
                         status: "failed".to_string(),
-                        modified: *deleted,
+                        modified: *deleted || quarantined.is_some(),
                         output_path: None,
                         fixes_applied: None,
                         reason: None,
                         error: Some(error.clone()),
+                        quarantined: quarantined.as_ref().map(|p| p.display().to_string()),
                         deleted: if *deleted { Some(true) } else { None },
                     },
                 })
@@ -474,10 +493,24 @@ impl Printer {
             return;
         }
 
+        let unrepairable_quarantined = results
+            .iter()
+            .filter(|r| match r {
+                RepairResult::Unrepairable { quarantined, .. } => quarantined.is_some(),
+                _ => false,
+            })
+            .count();
         let unrepairable_cleaned = results
             .iter()
             .filter(|r| match r {
                 RepairResult::Unrepairable { deleted, .. } => *deleted,
+                _ => false,
+            })
+            .count();
+        let failed_quarantined = results
+            .iter()
+            .filter(|r| match r {
+                RepairResult::Failed { quarantined, .. } => quarantined.is_some(),
                 _ => false,
             })
             .count();
@@ -515,7 +548,9 @@ impl Printer {
             } else {
                 unrepairable.to_string().dark_grey()
             },
-            if unrepairable_cleaned > 0 {
+            if unrepairable_quarantined > 0 {
+                format!(" ({} quarantined to .broken)", unrepairable_quarantined).yellow().to_string()
+            } else if unrepairable_cleaned > 0 {
                 format!(" ({} cleaned)", unrepairable_cleaned).red().to_string()
             } else {
                 String::new()
@@ -528,7 +563,9 @@ impl Printer {
             } else {
                 failed.to_string().dark_grey()
             },
-            if failed_cleaned > 0 {
+            if failed_quarantined > 0 {
+                format!(" ({} quarantined to .broken)", failed_quarantined).yellow().to_string()
+            } else if failed_cleaned > 0 {
                 format!(" ({} cleaned)", failed_cleaned).red().to_string()
             } else {
                 String::new()

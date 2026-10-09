@@ -83,6 +83,14 @@ pub struct Cli {
     /// Disable automatic deletion and cleaning of unrepairable and corrupted mods.
     #[arg(long)]
     pub no_delete_unrepairable: bool,
+
+    /// Disable automatic quarantine of unrepairable and corrupted mods to .broken/ folder.
+    #[arg(long)]
+    pub no_quarantine: bool,
+
+    /// Permanently delete unrepairable and corrupted mods instead of quarantining them to .broken/.
+    #[arg(long)]
+    pub delete_unrepairable: bool,
 }
 
 
@@ -213,6 +221,14 @@ pub struct RepairArgs {
     /// Disable automatic deletion and cleaning of unrepairable and corrupted mods.
     #[arg(long)]
     pub no_delete_unrepairable: bool,
+
+    /// Disable automatic quarantine of unrepairable and corrupted mods to .broken/ folder.
+    #[arg(long)]
+    pub no_quarantine: bool,
+
+    /// Permanently delete unrepairable and corrupted mods instead of quarantining them to .broken/.
+    #[arg(long)]
+    pub delete_unrepairable: bool,
 }
 
 

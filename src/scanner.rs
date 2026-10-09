@@ -91,9 +91,19 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
             if path == dir {
                 continue;
             }
-            if path.is_dir() && is_fantome_folder(path) {
-                candidates.push(path.to_path_buf());
-                it.skip_current_dir(); // Don't descend into META/WAD of this mod!
+            if path.is_dir() {
+                let dir_name = entry.file_name().to_string_lossy();
+                if dir_name.starts_with('.')
+                    || dir_name.eq_ignore_ascii_case("hematite-fixed")
+                    || dir_name.eq_ignore_ascii_case("backup")
+                {
+                    it.skip_current_dir();
+                    continue;
+                }
+                if is_fantome_folder(path) {
+                    candidates.push(path.to_path_buf());
+                    it.skip_current_dir(); // Don't descend into META/WAD of this mod!
+                }
             } else if path.is_file() && is_candidate_file(path) {
                 candidates.push(path.to_path_buf());
             }
@@ -101,6 +111,13 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
     } else if let Ok(read_dir) = fs_err::read_dir(dir) {
         for entry in read_dir.filter_map(Result::ok) {
             let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.')
+                || name.eq_ignore_ascii_case("hematite-fixed")
+                || name.eq_ignore_ascii_case("backup")
+            {
+                continue;
+            }
             if (path.is_dir() && is_fantome_folder(&path))
                 || (path.is_file() && is_candidate_file(&path))
             {
