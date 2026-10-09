@@ -96,9 +96,9 @@ lol-mod-fixer.exe
 - Diagnoses and repairs repairable archives safely in-place.
 - Automatically pauses at the end (`Press Enter to exit...`) when run interactively.
 
-### 2. Administrator Launcher Script (`run-fixer-as-admin.bat`)
+### 2. Administrator Launcher Script (`scripts/run-fixer-as-admin.bat`)
 When running inside recent Rose installations that apply restrictive folder permissions:
-- Right-click `run-fixer-as-admin.bat` $\rightarrow$ **Run as administrator**.
+- Right-click `scripts/run-fixer-as-admin.bat` (or the one included in release packages) $\rightarrow$ **Run as administrator**.
 - Automatically prompts for UAC elevation, unlocks restricted NTFS permissions, repairs all mods, beautifies folder names, and synchronizes `rose_mod_targets.json`.
 - Forwards any CLI arguments passed to it (e.g. `run-fixer-as-admin.bat --no-beautify`).
 

@@ -24,7 +24,11 @@ echo.
 
 if exist "%~dp0lol-mod-fixer.exe" (
     "%~dp0lol-mod-fixer.exe" repair --pause %*
+) else if exist "%~dp0..\lol-mod-fixer.exe" (
+    "%~dp0..\lol-mod-fixer.exe" repair --pause %*
+) else if exist "%~dp0..\dist\lol-mod-fixer-static.exe" (
+    "%~dp0..\dist\lol-mod-fixer-static.exe" repair --pause %*
 ) else (
-    echo Error: lol-mod-fixer.exe was not found in %~dp0
+    echo Error: lol-mod-fixer.exe was not found in "%~dp0" or parent directory.
     pause
 )
