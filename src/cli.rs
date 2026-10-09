@@ -67,6 +67,14 @@ pub struct Cli {
     /// Disable automatic beautification of mod names and folders.
     #[arg(long)]
     pub no_beautify: bool,
+
+    /// Disable automatic cleanup of empty folders and orphan Rose manifests.
+    #[arg(long)]
+    pub no_cleanup: bool,
+
+    /// Disable automatic generation of skin folder ID mappings.
+    #[arg(long)]
+    pub no_mapping: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -113,6 +121,18 @@ pub struct TargetArgs {
     /// Request Administrator elevation via UAC to unlock restricted mod folders.
     #[arg(long)]
     pub elevate: bool,
+
+    /// Disable automatic beautification of mod names and folders.
+    #[arg(long)]
+    pub no_beautify: bool,
+
+    /// Disable automatic cleanup of empty folders and orphan Rose manifests.
+    #[arg(long)]
+    pub no_cleanup: bool,
+
+    /// Disable automatic generation of skin folder ID mappings.
+    #[arg(long)]
+    pub no_mapping: bool,
 }
 
 #[derive(Args, Debug)]
@@ -160,7 +180,20 @@ pub struct RepairArgs {
     /// Request Administrator elevation via UAC to unlock restricted mod folders.
     #[arg(long)]
     pub elevate: bool,
+
+    /// Disable automatic beautification of mod names and folders.
+    #[arg(long)]
+    pub no_beautify: bool,
+
+    /// Disable automatic cleanup of empty folders and orphan Rose manifests.
+    #[arg(long)]
+    pub no_cleanup: bool,
+
+    /// Disable automatic generation of skin folder ID mappings.
+    #[arg(long)]
+    pub no_mapping: bool,
 }
+
 
 #[derive(Args, Debug)]
 pub struct ConfigArgs {

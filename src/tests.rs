@@ -814,3 +814,149 @@ fn test_beautify_and_sync_folder_in_rose() {
     assert_eq!(entry.get("folderHash").unwrap().as_str().unwrap(), expected_new_hash);
 }
 
+#[test]
+fn test_cleanup_empty_folders_and_orphan_manifests() {
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path();
+
+    // 1. Orphan target folders containing only rose_mod_targets.json
+    let orphan1 = skins_dir.join("105000");
+    fs_err::create_dir_all(&orphan1).unwrap();
+    fs_err::write(orphan1.join("rose_mod_targets.json"), b"{\"mods\":{}}").unwrap();
+
+    let orphan2 = skins_dir.join("13000");
+    fs_err::create_dir_all(&orphan2).unwrap();
+    fs_err::write(orphan2.join("rose_mod_targets.json"), b"{\"mods\":{}}").unwrap();
+
+    // 2. Active target folder with an active mod and an empty mod subfolder
+    let active_target = skins_dir.join("106000");
+    let active_mod = active_target.join("Angel Volibear v1.0");
+    fs_err::create_dir_all(&active_mod).unwrap();
+    fs_err::write(active_mod.join("test.txt"), b"some content").unwrap();
+    fs_err::write(active_target.join("rose_mod_targets.json"), b"{\"mods\":{\"test\":{}}}").unwrap();
+
+    let empty_mod = active_target.join("Empty Mod");
+    fs_err::create_dir_all(&empty_mod).unwrap();
+
+    // 3. Mod with non-empty META and non-empty META/hashes (must NEVER be deleted)
+    let non_empty_mod = active_target.join("Emilia Anivia v1.0");
+    let non_empty_hashes = non_empty_mod.join("META").join("hashes");
+    fs_err::create_dir_all(&non_empty_hashes).unwrap();
+    fs_err::write(non_empty_mod.join("META").join("info.json"), b"{\"Name\":\"Emilia\"}").unwrap();
+    fs_err::write(non_empty_hashes.join("game.harvested.hashes.txt"), b"some hashes").unwrap();
+
+    // 4. Mod with non-empty META, but EMPTY META/hashes (empty hashes folder is safe to delete)
+    let garen_mod = active_target.join("Chun Li Garen v2.0");
+    let empty_hashes = garen_mod.join("META").join("hashes");
+    fs_err::create_dir_all(&empty_hashes).unwrap();
+    fs_err::write(garen_mod.join("META").join("info.json"), b"{\"Name\":\"Chun Li\"}").unwrap();
+
+    // 5. Empty Hematite-Fixed folder
+    let hematite_dir = skins_dir.join("sub").join("Hematite-Fixed");
+    fs_err::create_dir_all(&hematite_dir).unwrap();
+
+    // Run cleanup
+    let report = crate::cleanup::cleanup_empty_rose_folders(skins_dir).unwrap();
+
+    assert_eq!(report.deleted_targets, 2);
+    assert_eq!(report.deleted_mods, 1);
+    assert_eq!(report.deleted_hematite_fixed, 1);
+    assert_eq!(report.deleted_manifest_files, 2);
+    assert_eq!(report.deleted_empty_subdirs, 1);
+
+    // Verify orphan folders and empty mod folders are gone
+    assert!(!orphan1.exists(), "Orphan target 105000 must be deleted");
+    assert!(!orphan2.exists(), "Orphan target 13000 must be deleted");
+    assert!(!empty_mod.exists(), "Empty mod folder must be deleted");
+    assert!(!hematite_dir.exists(), "Empty Hematite-Fixed must be deleted");
+
+    // CRITICAL CHECKS:
+    // 1. Folders with files inside are NEVER deleted:
+    assert!(non_empty_mod.join("META").exists(), "META with files must NEVER be deleted");
+    assert!(non_empty_hashes.exists(), "META/hashes with files must NEVER be deleted");
+    assert!(non_empty_hashes.join("game.harvested.hashes.txt").exists(), "Hash files preserved");
+
+    // 2. Empty META/hashes is deleted, but its parent META (containing info.json) is PRESERVED:
+    assert!(!empty_hashes.exists(), "Empty META/hashes folder must be deleted");
+    assert!(garen_mod.join("META").exists(), "META containing info.json must be preserved");
+    assert!(garen_mod.join("META").join("info.json").exists(), "info.json preserved");
+
+    // Verify active target folder and mod are preserved
+    assert!(active_target.exists(), "Active target folder must be preserved");
+    assert!(active_mod.exists(), "Active mod folder must be preserved");
+    assert!(active_target.join("rose_mod_targets.json").exists(), "Manifest in active target preserved");
+}
+
+
+#[test]
+fn test_generate_skin_mappings_sync() {
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path();
+
+    // Setup folder 106000 (Volibear) with 2 mods
+    let voli_dir = skins_dir.join("106000");
+    let mod1 = voli_dir.join("Angel Volibear v1.0");
+    let mod2 = voli_dir.join("Tank Volibear v1.0");
+    fs_err::create_dir_all(&mod1).unwrap();
+    fs_err::create_dir_all(&mod2).unwrap();
+    fs_err::write(mod1.join("a.txt"), b"a").unwrap();
+    fs_err::write(mod2.join("b.txt"), b"b").unwrap();
+
+    // Setup folder 33000 (Rammus) with 1 mod
+    let rammus_dir = skins_dir.join("33000");
+    let mod3 = rammus_dir.join("Sonic Rammus v1.0");
+    fs_err::create_dir_all(&mod3).unwrap();
+    fs_err::write(mod3.join("c.txt"), b"c").unwrap();
+
+    // Generate mappings
+    let summary = crate::mapping::generate_skin_mappings(skins_dir).unwrap().expect("Summary returned");
+    assert_eq!(summary.total_folders, 2);
+    assert_eq!(summary.total_mods, 3);
+
+    let txt_path = skins_dir.join(crate::mapping::MAPPING_TXT_FILENAME);
+    let json_path = skins_dir.join(crate::mapping::MAPPING_JSON_FILENAME);
+
+    assert!(txt_path.exists());
+    assert!(json_path.exists());
+
+    let txt_content = fs_err::read_to_string(&txt_path).unwrap();
+    assert!(txt_content.contains("Rammus"));
+    assert!(txt_content.contains("Volibear"));
+    assert!(txt_content.contains("Sonic Rammus v1.0"));
+    assert!(txt_content.contains("Angel Volibear v1.0"));
+    assert!(txt_content.contains("Tank Volibear v1.0"));
+
+    let json_content = fs_err::read_to_string(&json_path).unwrap();
+    let manifest: crate::mapping::MappingFileManifest = serde_json::from_str(&json_content).unwrap();
+    assert_eq!(manifest.total_folders, 2);
+    assert_eq!(manifest.total_mods, 3);
+    assert_eq!(manifest.mappings[0].folder, "33000");
+    assert_eq!(manifest.mappings[0].champion, "Rammus");
+    assert_eq!(manifest.mappings[0].is_base_skin, true);
+    assert_eq!(manifest.mappings[0].mods, vec!["Sonic Rammus v1.0"]);
+
+    assert_eq!(manifest.mappings[1].folder, "106000");
+    assert_eq!(manifest.mappings[1].champion, "Volibear");
+    assert_eq!(manifest.mappings[1].is_base_skin, true);
+    assert_eq!(manifest.mappings[1].mods, vec!["Angel Volibear v1.0", "Tank Volibear v1.0"]);
+
+    // Test synchronization: Remove folder 33000
+    fs_err::remove_dir_all(&rammus_dir).unwrap();
+
+    // Re-run mapping generation
+    let summary2 = crate::mapping::generate_skin_mappings(skins_dir).unwrap().expect("Summary returned");
+    assert_eq!(summary2.total_folders, 1);
+    assert_eq!(summary2.total_mods, 2);
+
+    let txt_content2 = fs_err::read_to_string(&txt_path).unwrap();
+    assert!(!txt_content2.contains("Rammus"), "Deleted champion Rammus must be removed from txt");
+    assert!(!txt_content2.contains("33000"), "Deleted folder 33000 must be removed from txt");
+    assert!(txt_content2.contains("Volibear"));
+
+    let json_content2 = fs_err::read_to_string(&json_path).unwrap();
+    let manifest2: crate::mapping::MappingFileManifest = serde_json::from_str(&json_content2).unwrap();
+    assert_eq!(manifest2.total_folders, 1);
+    assert_eq!(manifest2.mappings[0].folder, "106000");
+}
+
+

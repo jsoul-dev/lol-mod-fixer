@@ -496,8 +496,70 @@ impl Printer {
         );
     }
 
+    pub fn print_cleanup_summary(&self, report: &crate::cleanup::CleanupReport) {
+        if self.json || report.is_empty() {
+            return;
+        }
+        println!("{}", "--- Rose Directory Cleanup ---".dark_grey());
+        if report.deleted_targets > 0 {
+            println!(
+                "  {} Deleted {} empty/orphan target folder(s)",
+                "✓".green().bold(),
+                report.deleted_targets.to_string().yellow().bold()
+            );
+        }
+        if report.deleted_mods > 0 {
+            println!(
+                "  {} Deleted {} empty mod folder(s)",
+                "✓".green().bold(),
+                report.deleted_mods.to_string().yellow().bold()
+            );
+        }
+        if report.deleted_hematite_fixed > 0 {
+            println!(
+                "  {} Deleted {} empty Hematite-Fixed folder(s)",
+                "✓".green().bold(),
+                report.deleted_hematite_fixed.to_string().yellow().bold()
+            );
+        }
+        if report.deleted_empty_subdirs > 0 {
+            println!(
+                "  {} Deleted {} empty internal mod subfolder(s) (e.g. empty META/hashes)",
+                "✓".green().bold(),
+                report.deleted_empty_subdirs.to_string().yellow().bold()
+            );
+        }
+        println!();
+    }
+
+
+    pub fn print_mapping_summary(&self, summary: &crate::mapping::MappingSummary) {
+        if self.json {
+            return;
+        }
+        println!("{}", "--- Skin ID Mappings Generated ---".dark_grey());
+        println!(
+            "  {} Mapped {} skin folder(s) with {} installed mod(s)",
+            "✓".green().bold(),
+            summary.total_folders.to_string().cyan().bold(),
+            summary.total_mods.to_string().cyan().bold()
+        );
+        println!(
+            "  {} Text file : {}",
+            "•".dark_grey(),
+            summary.txt_path.file_name().unwrap_or_default().to_string_lossy().white()
+        );
+        println!(
+            "  {} JSON file : {}",
+            "•".dark_grey(),
+            summary.json_path.file_name().unwrap_or_default().to_string_lossy().white()
+        );
+        println!();
+    }
+
     /// Prompt user to press enter when appropriate.
     pub fn maybe_pause(&self, pause: bool) {
+
         if self.json || !pause {
             return;
         }

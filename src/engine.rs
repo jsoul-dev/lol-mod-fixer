@@ -121,6 +121,8 @@ pub fn execute_repair(
     dry_run: bool,
     recursive: bool,
     beautify: bool,
+    cleanup: bool,
+    mapping: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
     let (config, _) = resolve_ltk_config(cli_league, None);
@@ -159,6 +161,14 @@ pub fn execute_repair(
 
     printer.print_banner(Some(&input_path));
 
+    // 1. Initial cleanup of empty folders and orphan target manifests
+    if cleanup && !dry_run {
+        match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
+            Ok(report) => printer.print_cleanup_summary(&report),
+            Err(e) => tracing::warn!("Folder cleanup notice: {e}"),
+        }
+    }
+
     let mut candidates = scan_directory(&input_path, recursive)?;
     if candidates.is_empty() && !recursive {
         let sub_candidates = scan_directory(&input_path, true)?;
@@ -168,27 +178,47 @@ pub fn execute_repair(
     }
 
     let total = candidates.len();
+    let mut results = Vec::with_capacity(total);
+
     if total == 0 {
         if !printer.json {
             println!("No mod archives (.fantome, .modpkg, .wad.client) found.");
         }
-        printer.print_repair_summary(&[], Some(&input_path));
-        return Ok(exit_codes::SUCCESS);
+    } else {
+        for (idx, path) in candidates.iter().enumerate() {
+            let active_path = if beautify && crate::formats::is_fantome_folder(path) {
+                match crate::beautify::beautify_and_sync_folder(path) {
+                    Ok(Some(new_p)) => new_p,
+                    _ => path.clone(),
+                }
+            } else {
+                path.clone()
+            };
+            let res = repair_mod_archive(&active_path, None, &config, backup, dry_run)?;
+            printer.print_repair_item(idx, total, &res);
+            results.push(res);
+        }
     }
 
-    let mut results = Vec::with_capacity(total);
-    for (idx, path) in candidates.iter().enumerate() {
-        let active_path = if beautify && crate::formats::is_fantome_folder(path) {
-            match crate::beautify::beautify_and_sync_folder(path) {
-                Ok(Some(new_p)) => new_p,
-                _ => path.clone(),
+    // 2. Post-repair cleanup pass (in case any operation left empty folders)
+    if cleanup && !dry_run {
+        match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
+            Ok(report) => {
+                if !report.is_empty() {
+                    printer.print_cleanup_summary(&report);
+                }
             }
-        } else {
-            path.clone()
-        };
-        let res = repair_mod_archive(&active_path, None, &config, backup, dry_run)?;
-        printer.print_repair_item(idx, total, &res);
-        results.push(res);
+            Err(e) => tracing::warn!("Post-repair folder cleanup notice: {e}"),
+        }
+    }
+
+    // 3. Generate/update skin ID mappings (skin_mappings.txt and skin_mappings.json)
+    if mapping && !dry_run {
+        match crate::mapping::generate_skin_mappings(&input_path) {
+            Ok(Some(summary)) => printer.print_mapping_summary(&summary),
+            Ok(None) => {}
+            Err(e) => tracing::warn!("Skin mapping generation notice: {e}"),
+        }
     }
 
     printer.print_repair_summary(&results, Some(&input_path));
@@ -200,3 +230,4 @@ pub fn execute_repair(
         Ok(exit_codes::SUCCESS)
     }
 }
+

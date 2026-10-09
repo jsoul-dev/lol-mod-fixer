@@ -12,6 +12,8 @@ const SKIN_IDS_JSON: &str = include_str!("data/skin_ids.json");
 pub struct ChampionDb {
     /// Maps skin ID / champion ID (e.g. 106000, 106) -> Champion Name (e.g. "Volibear")
     id_to_name: HashMap<u32, &'static str>,
+    /// Maps exact skin ID (e.g. 106001, 106000) -> Skin Name (e.g. "Thunder Lord Volibear")
+    skin_id_to_name: HashMap<u32, &'static str>,
     /// Maps normalized lowercase name / alias -> Canonical Champion Name
     name_to_champ: HashMap<String, &'static str>,
 }
@@ -24,15 +26,17 @@ impl ChampionDb {
             serde_json::from_str(SKIN_IDS_JSON).unwrap_or_default();
 
         let mut id_to_name = HashMap::new();
+        let mut skin_id_to_name = HashMap::new();
         let mut name_to_champ = HashMap::new();
 
-        // Extract base champions (skin_id % 1000 == 0)
+        // Populate all skins and extract base champions (skin_id % 1000 == 0)
         for (id_str, skin_name) in &parsed {
             if let Ok(id) = id_str.parse::<u32>() {
+                let static_name: &'static str = Box::leak(skin_name.clone().into_boxed_str());
+                skin_id_to_name.insert(id, static_name);
+
                 if id % 1000 == 0 && id > 0 {
                     let champ_id = id / 1000;
-                    let static_name: &'static str = Box::leak(skin_name.clone().into_boxed_str());
-
                     id_to_name.insert(id, static_name);
                     id_to_name.insert(champ_id, static_name);
 
@@ -42,6 +46,7 @@ impl ChampionDb {
                 }
             }
         }
+
 
         // Add common League aliases and internal champion names
         let aliases = [
@@ -106,6 +111,7 @@ impl ChampionDb {
 
         Self {
             id_to_name,
+            skin_id_to_name,
             name_to_champ,
         }
     }
@@ -139,8 +145,30 @@ pub fn champion_by_id(id: u32) -> Option<&'static str> {
         })
 }
 
+/// Lookup exact skin name by skin ID (e.g. 106001 -> "Thunder Lord Volibear", 106000 -> "Volibear").
+pub fn skin_by_id(id: u32) -> Option<&'static str> {
+    let db = get_db();
+    db.skin_id_to_name.get(&id).copied()
+}
+
+/// Resolve champion name, skin name, and whether it's a base skin from a numeric folder/skin ID.
+pub fn resolve_folder_skin_info(id: u32) -> (Option<&'static str>, Option<&'static str>, bool) {
+    let champ = champion_by_id(id);
+    let is_base = id % 1000 == 0;
+    let skin = skin_by_id(id).or_else(|| {
+        let base = (id / 1000) * 1000;
+        if base > 0 {
+            skin_by_id(base)
+        } else {
+            skin_by_id(id * 1000)
+        }
+    });
+    (champ, skin, is_base)
+}
+
 /// Lookup champion name by raw name string (case/punctuation-insensitive).
 pub fn champion_by_name(name: &str) -> Option<&'static str> {
+
     let db = get_db();
     let norm = normalize_champ_key(name);
     db.name_to_champ.get(&norm).copied()

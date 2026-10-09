@@ -4,9 +4,12 @@
 
 pub mod beautify;
 pub mod champions;
+pub mod cleanup;
+pub mod mapping;
 mod cli;
 mod config;
 mod engine;
+
 mod error;
 mod formats;
 mod health;
@@ -146,13 +149,17 @@ fn main() -> ExitCode {
 
 fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
     let beautify = !cli.no_beautify;
+    let cleanup = !cli.no_cleanup;
+    let mapping = !cli.no_mapping;
+
     match cli.command {
         Some(Commands::Check(args)) => {
             let target = args.path.or(args.dir).or(cli.dir).or(cli.target);
             let league = args.league.or(cli.league);
             let recursive = args.recursive || cli.recursive;
             let check_printer = Printer::new(args.json || cli.json, args.verbose || cli.verbose);
-            execute_check(target, league, recursive, beautify, &check_printer)
+            let b = if args.no_beautify { false } else { beautify };
+            execute_check(target, league, recursive, b, &check_printer)
         }
         Some(Commands::Repair(args)) => {
             let input = args.input.or(args.dir).or(cli.dir).or(cli.target);
@@ -162,6 +169,9 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let dry_run = args.dry_run || cli.dry_run;
             let recursive = args.recursive || cli.recursive;
             let repair_printer = Printer::new(args.json || cli.json, args.verbose || cli.verbose);
+            let b = if args.no_beautify { false } else { beautify };
+            let c = if args.no_cleanup { false } else { cleanup };
+            let m = if args.no_mapping { false } else { mapping };
             execute_repair(
                 input,
                 output,
@@ -169,7 +179,9 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 backup,
                 dry_run,
                 recursive,
-                beautify,
+                b,
+                c,
+                m,
                 &repair_printer,
             )
         }
@@ -181,6 +193,9 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let dry_run = args.dry_run || cli.dry_run;
             let recursive = args.recursive || cli.recursive;
             let repair_printer = Printer::new(args.json || cli.json, args.verbose || cli.verbose);
+            let b = if args.no_beautify { false } else { beautify };
+            let c = if args.no_cleanup { false } else { cleanup };
+            let m = if args.no_mapping { false } else { mapping };
             execute_repair(
                 input,
                 output,
@@ -188,7 +203,9 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 backup,
                 dry_run,
                 recursive,
-                beautify,
+                b,
+                c,
+                m,
                 &repair_printer,
             )
         }
@@ -204,10 +221,13 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let backup = cli.backup;
             let dry_run = cli.dry_run;
             let recursive = true;
-            execute_repair(target, None, league, backup, dry_run, recursive, beautify, printer)
+            execute_repair(
+                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, printer,
+            )
         }
     }
 }
+
 
 fn handle_config(action: Option<ConfigAction>) -> Result<(), FixerError> {
     let mut config = AppConfig::load();

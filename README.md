@@ -24,6 +24,16 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
     - `Shadow_The_Hedgehog__Ekko_-1.1.3` $\rightarrow$ `Shadow The Hedgehog Ekko v1.1.3`
   - Fully idempotent: already-beautified mods remain untouched.
   - Can be disabled at any time with `--no-beautify`.
+- **Automatic Empty Folder & Orphan Manifest Cleanup (ON by Default)**:
+  - Automatically cleans empty mod subdirectories and unused target folders.
+  - Automatically deletes orphan target directories containing only `rose_mod_targets.json` / `rose_wad_targets.json` when all mods have been uninstalled.
+  - Recursively searches for and removes empty `Hematite-Fixed` folders.
+  - Can be disabled at any time with `--no-cleanup`.
+- **Automatic Skin ID Mapping Generator (`skin_mappings.txt` & `skin_mappings.json`) (ON by Default)**:
+  - Generates human-readable (`skin_mappings.txt`) and machine-readable (`skin_mappings.json`) mapping files directly beside the skin folders in Rose's skins directory.
+  - Cross-references numeric skin folder IDs (e.g. `106000`, `33000`) with champion names (`Volibear`, `Rammus`), skin names, and lists all installed mods.
+  - Automatically synchronizes when folders are deleted or newly imported.
+  - Can be disabled at any time with `--no-mapping`.
 - **Embedded Offline League Champion & Skin Database**:
   - Bundles 9,303 official skin IDs from `Alban1911/LeagueSkins`.
   - Accurately identifies champions using parent folder Skin IDs (`106000` $\rightarrow$ Volibear, `33000` $\rightarrow$ Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
@@ -31,9 +41,10 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - **Extracted Mod Folder Support**: Directly supports `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` structures.
   - **Manifest Synchronization**: Automatically updates Rose's `rose_mod_targets.json` with the newly repaired `folderHash` and `wadHashes` using Rose's exact hashing algorithm, preserving target skin IDs and display names.
   - **Automatic NTFS Permissions Unlocking**: Detects restricted/hooked Rose folders (`os error 5: Access is denied`) and automatically resets NTFS access control lists (ACLs) when elevated.
-- **Double-Click / Zero-Argument Workflow**: Dropping `lol-mod-fixer.exe` into a folder with mods and double-clicking automatically scans and repairs the directory, pausing on completion so the console window remains visible.
+- **Double-Click / Zero-Argument Workflow**: Dropping `lol-mod-fixer.exe` into a folder with mods and double-clicking automatically cleans empty folders, scans and repairs the directory, synchronizes skin ID mappings, and pauses on completion so the console window remains visible.
 - **Vibrant ANSI Console Output**: Color-coded status badges (`HEALTHY`, `REPAIRABLE`, `UNREPAIRABLE`, `BROKEN`) with native Windows VT100 console support.
 - **Machine-Readable JSON Mode**: `--json` output writes pure, uncolored JSON to `stdout` with progress and diagnostics directed to `stderr`.
+
 
 ---
 
@@ -170,6 +181,8 @@ lol-mod-fixer config set-pause false
 | `--dry-run` | Scan and diagnose problems without writing or modifying files. |
 | `--backup` | Create a `.bak` backup before replacing any repaired archive. |
 | `--no-beautify` | Disable automatic beautification of mod and folder names. |
+| `--no-cleanup` | Disable automatic cleanup of empty folders and orphan Rose manifests. |
+| `--no-mapping` | Disable automatic generation of skin folder ID mappings (`skin_mappings.txt` and `.json`). |
 | `--elevate` | Request Administrator elevation via UAC to unlock restricted mod folders. |
 | `--pause` | Force interactive pause prompt (`Press Enter to exit...`) at the end. |
 | `--no-pause` | Disable interactive pause prompt at the end (useful for scripts/CI). |
