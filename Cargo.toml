@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Standalone native CLI tool for League of Legends mod diagnosis and repair"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/jsoul-dev/LoL-Mod-Fixer"
+repository = "https://github.com/jsoul-dev/lol-mod-fixer"
 
 [dependencies]
 ltk-manager-base = { path = "vendor/ltk-manager/crates/ltk-manager-base" }

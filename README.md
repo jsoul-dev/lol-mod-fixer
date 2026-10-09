@@ -1,8 +1,8 @@
 # LoL Mod Fixer (`lol-mod-fixer`)
 
-[![CI](https://github.com/jsoul-dev/LoL-Mod-Fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/LoL-Mod-Fixer/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jsoul-dev/LoL-Mod-Fixer?style=flat-square&color=blue)](https://github.com/jsoul-dev/LoL-Mod-Fixer/releases/latest)
-[![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows)](https://github.com/jsoul-dev/LoL-Mod-Fixer/releases/latest)
+[![CI](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jsoul-dev/lol-mod-fixer?style=flat-square&color=blue)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, automatic name beautification, and legacy structure migration, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose](https://github.com/Alban1911/Rose) integration.
@@ -70,7 +70,7 @@ The `dist/` directory provides two release variants:
 
 ```bash
 # Clone the repository with submodules
-git clone --recurse-submodules https://github.com/your-username/lol-mod-fixer.git
+git clone --recurse-submodules https://github.com/jsoul-dev/lol-mod-fixer.git
 cd lol-mod-fixer
 
 # Build static release binary (configured in .cargo/config.toml)
