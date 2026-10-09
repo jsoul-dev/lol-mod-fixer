@@ -123,6 +123,7 @@ pub fn execute_repair(
     beautify: bool,
     cleanup: bool,
     mapping: bool,
+    migrate: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
     let (config, _) = resolve_ltk_config(cli_league, None);
@@ -161,6 +162,14 @@ pub fn execute_repair(
 
     printer.print_banner(Some(&input_path));
 
+    // 0. Check for and migrate outdated Rose structure (.fantome/.zip archives in numeric skin folders)
+    if migrate && !dry_run && crate::migrate::is_rose_skins_directory(&input_path) {
+        match crate::migrate::migrate_outdated_rose_directory(&input_path) {
+            Ok(report) => printer.print_migration_summary(&report),
+            Err(e) => tracing::warn!("Rose legacy migration notice: {e}"),
+        }
+    }
+
     // 1. Initial cleanup of empty folders and orphan target manifests
     if cleanup && !dry_run {
         match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
@@ -168,6 +177,7 @@ pub fn execute_repair(
             Err(e) => tracing::warn!("Folder cleanup notice: {e}"),
         }
     }
+
 
     let mut candidates = scan_directory(&input_path, recursive)?;
     if candidates.is_empty() && !recursive {

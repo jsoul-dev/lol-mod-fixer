@@ -496,10 +496,47 @@ impl Printer {
         );
     }
 
+    pub fn print_migration_summary(&self, report: &crate::migrate::MigrationReport) {
+        if self.json || report.is_empty() {
+            return;
+        }
+        println!("{}", "--- Rose Legacy Structure Migration ---".dark_grey());
+        if report.extracted_archives > 0 {
+            println!(
+                "  {} Migrated and extracted {} archive(s) into modern Rose folders",
+                "✓".green().bold(),
+                report.extracted_archives.to_string().yellow().bold()
+            );
+        }
+        if report.manifests_rebuilt > 0 {
+            println!(
+                "  {} Built/synchronized {} rose_mod_targets.json manifest(s)",
+                "✓".green().bold(),
+                report.manifests_rebuilt.to_string().cyan().bold()
+            );
+        }
+        if report.skipped_archives > 0 {
+            println!(
+                "  {} Skipped {} archive(s) already extracted",
+                "•".dark_grey(),
+                report.skipped_archives.to_string().dark_grey()
+            );
+        }
+        if report.failed_archives > 0 {
+            println!(
+                "  {} {} archive(s) failed extraction",
+                "✗".red().bold(),
+                report.failed_archives.to_string().red().bold()
+            );
+        }
+        println!();
+    }
+
     pub fn print_cleanup_summary(&self, report: &crate::cleanup::CleanupReport) {
         if self.json || report.is_empty() {
             return;
         }
+
         println!("{}", "--- Rose Directory Cleanup ---".dark_grey());
         if report.deleted_targets > 0 {
             println!(

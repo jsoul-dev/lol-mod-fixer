@@ -38,10 +38,12 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
   - Bundles 9,303 official skin IDs from `Alban1911/LeagueSkins`.
   - Accurately identifies champions using parent folder Skin IDs (`106000` $\rightarrow$ Volibear, `33000` $\rightarrow$ Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
 - **Rose Mod Manager Integration**:
+  - **Legacy Structure Auto-Migration (ON by Default)**: Automatically detects outdated Rose structures where `.fantome` or `.zip` archives were placed directly inside numeric skin target folders without being extracted. Safely extracts archives, flattens redundant wrapper folders, validates files, unlinks original archives, and builds `rose_mod_targets.json` with exact `folderHash` and `wadHashes` so mods inject properly in Rose client and Party Mode. Already updated structures are left completely untouched. (Disable with `--no-migrate`).
   - **Extracted Mod Folder Support**: Directly supports `<mod_dir>/META/info.json` and `<mod_dir>/WAD/*.wad.client` structures.
   - **Manifest Synchronization**: Automatically updates Rose's `rose_mod_targets.json` with the newly repaired `folderHash` and `wadHashes` using Rose's exact hashing algorithm, preserving target skin IDs and display names.
   - **Automatic NTFS Permissions Unlocking**: Detects restricted/hooked Rose folders (`os error 5: Access is denied`) and automatically resets NTFS access control lists (ACLs) when elevated.
-- **Double-Click / Zero-Argument Workflow**: Dropping `lol-mod-fixer.exe` into a folder with mods and double-clicking automatically cleans empty folders, scans and repairs the directory, synchronizes skin ID mappings, and pauses on completion so the console window remains visible.
+- **Double-Click / Zero-Argument Workflow**: Dropping `lol-mod-fixer.exe` into a folder with mods and double-clicking automatically migrates legacy archives, cleans empty folders, scans and repairs the directory, synchronizes skin ID mappings, and pauses on completion so the console window remains visible.
+
 - **Vibrant ANSI Console Output**: Color-coded status badges (`HEALTHY`, `REPAIRABLE`, `UNREPAIRABLE`, `BROKEN`) with native Windows VT100 console support.
 - **Machine-Readable JSON Mode**: `--json` output writes pure, uncolored JSON to `stdout` with progress and diagnostics directed to `stderr`.
 
@@ -183,6 +185,7 @@ lol-mod-fixer config set-pause false
 | `--no-beautify` | Disable automatic beautification of mod and folder names. |
 | `--no-cleanup` | Disable automatic cleanup of empty folders and orphan Rose manifests. |
 | `--no-mapping` | Disable automatic generation of skin folder ID mappings (`skin_mappings.txt` and `.json`). |
+| `--no-migrate` | Disable automatic migration of outdated Rose mod structures (.fantome/.zip archives). |
 | `--elevate` | Request Administrator elevation via UAC to unlock restricted mod folders. |
 | `--pause` | Force interactive pause prompt (`Press Enter to exit...`) at the end. |
 | `--no-pause` | Disable interactive pause prompt at the end (useful for scripts/CI). |

@@ -6,9 +6,11 @@ pub mod beautify;
 pub mod champions;
 pub mod cleanup;
 pub mod mapping;
+pub mod migrate;
 mod cli;
 mod config;
 mod engine;
+
 
 mod error;
 mod formats;
@@ -151,6 +153,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
     let beautify = !cli.no_beautify;
     let cleanup = !cli.no_cleanup;
     let mapping = !cli.no_mapping;
+    let migrate = !cli.no_migrate;
 
     match cli.command {
         Some(Commands::Check(args)) => {
@@ -172,6 +175,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let b = if args.no_beautify { false } else { beautify };
             let c = if args.no_cleanup { false } else { cleanup };
             let m = if args.no_mapping { false } else { mapping };
+            let mig = if args.no_migrate { false } else { migrate };
             execute_repair(
                 input,
                 output,
@@ -182,6 +186,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 b,
                 c,
                 m,
+                mig,
                 &repair_printer,
             )
         }
@@ -196,6 +201,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let b = if args.no_beautify { false } else { beautify };
             let c = if args.no_cleanup { false } else { cleanup };
             let m = if args.no_mapping { false } else { mapping };
+            let mig = if args.no_migrate { false } else { migrate };
             execute_repair(
                 input,
                 output,
@@ -206,6 +212,7 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
                 b,
                 c,
                 m,
+                mig,
                 &repair_printer,
             )
         }
@@ -222,11 +229,12 @@ fn run_app(cli: Cli, printer: &Printer) -> Result<i32, FixerError> {
             let dry_run = cli.dry_run;
             let recursive = true;
             execute_repair(
-                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, printer,
+                target, None, league, backup, dry_run, recursive, beautify, cleanup, mapping, migrate, printer,
             )
         }
     }
 }
+
 
 
 fn handle_config(action: Option<ConfigAction>) -> Result<(), FixerError> {

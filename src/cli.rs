@@ -75,7 +75,12 @@ pub struct Cli {
     /// Disable automatic generation of skin folder ID mappings.
     #[arg(long)]
     pub no_mapping: bool,
+
+    /// Disable automatic migration of outdated Rose mod structure (.fantome/.zip archives).
+    #[arg(long)]
+    pub no_migrate: bool,
 }
+
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
@@ -133,6 +138,10 @@ pub struct TargetArgs {
     /// Disable automatic generation of skin folder ID mappings.
     #[arg(long)]
     pub no_mapping: bool,
+
+    /// Disable automatic migration of outdated Rose mod structure (.fantome/.zip archives).
+    #[arg(long)]
+    pub no_migrate: bool,
 }
 
 #[derive(Args, Debug)]
@@ -192,7 +201,12 @@ pub struct RepairArgs {
     /// Disable automatic generation of skin folder ID mappings.
     #[arg(long)]
     pub no_mapping: bool,
+
+    /// Disable automatic migration of outdated Rose mod structure (.fantome/.zip archives).
+    #[arg(long)]
+    pub no_migrate: bool,
 }
+
 
 
 #[derive(Args, Debug)]

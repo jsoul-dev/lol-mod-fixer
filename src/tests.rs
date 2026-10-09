@@ -959,4 +959,103 @@ fn test_generate_skin_mappings_sync() {
     assert_eq!(manifest2.mappings[0].folder, "106000");
 }
 
+#[test]
+fn test_migrate_outdated_rose_directory() {
+    use std::io::Write;
+    let temp = TempDir::new().unwrap();
+    let skins_dir = temp.path();
+
+    fn create_mock_zip(path: &std::path::Path, files: &[(&str, &[u8])]) {
+        let file = fs_err::File::create(path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, content) in files {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(content).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    // Target 24000 (Jax): Contains raw Blood King Jax.fantome with standard structure
+    let target_24000 = skins_dir.join("24000");
+    fs_err::create_dir_all(&target_24000).unwrap();
+    let jax_archive = target_24000.join("Blood King Jax.fantome");
+    create_mock_zip(
+        &jax_archive,
+        &[
+            ("META/info.json", b"{\"Name\":\"Blood King Jax\"}"),
+            ("WAD/Jax.wad.client", b"wad-bytes-jax"),
+        ],
+    );
+
+    // Target 86000 (Garen): Contains raw Escanor Garen.zip with single-root wrapper
+    let target_86000 = skins_dir.join("86000");
+    fs_err::create_dir_all(&target_86000).unwrap();
+    let garen_archive = target_86000.join("Escanor Garen.zip");
+    create_mock_zip(
+        &garen_archive,
+        &[
+            ("Escanor Garen/META/info.json", b"{\"Name\":\"Escanor Garen\"}"),
+            ("Escanor Garen/WAD/Garen.wad.client", b"wad-bytes-garen"),
+        ],
+    );
+
+    // Target 106000 (Volibear): ALREADY modern extracted folder (must NOT be touched)
+    let target_106000 = skins_dir.join("106000");
+    let voli_mod = target_106000.join("Angel Volibear v1.0");
+    fs_err::create_dir_all(voli_mod.join("META")).unwrap();
+    fs_err::write(voli_mod.join("META").join("info.json"), b"{\"Name\":\"Angel Volibear\"}").unwrap();
+    fs_err::write(target_106000.join("rose_mod_targets.json"), b"{\"version\":1,\"championId\":106,\"targets\":[106000],\"mods\":{}}").unwrap();
+
+    // Verify detection
+    assert!(crate::migrate::is_rose_skins_directory(skins_dir));
+
+    // Run migration
+    let report = crate::migrate::migrate_outdated_rose_directory(skins_dir).unwrap();
+    assert_eq!(report.extracted_archives, 2);
+    assert_eq!(report.manifests_rebuilt, 2);
+
+    // 1. Check Jax extraction
+    assert!(!jax_archive.exists(), "Raw Jax archive must be deleted");
+    let jax_extracted = target_24000.join("Blood King Jax");
+    assert!(jax_extracted.is_dir());
+    assert!(jax_extracted.join("META").join("info.json").exists());
+    assert!(jax_extracted.join("WAD").join("Jax.wad.client").exists());
+
+    let jax_manifest_path = target_24000.join("rose_mod_targets.json");
+    assert!(jax_manifest_path.exists());
+    let jax_manifest: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&jax_manifest_path).unwrap()).unwrap();
+    assert_eq!(jax_manifest["championId"], 24);
+    assert_eq!(jax_manifest["targets"], serde_json::json!([24000]));
+    let jax_mods = jax_manifest["mods"].as_object().unwrap();
+    assert_eq!(jax_mods.len(), 1);
+    let jax_entry = jax_mods.values().next().unwrap();
+    assert_eq!(jax_entry["name"], "Blood King Jax");
+
+    // 2. Check Garen extraction and single-root flattening
+    assert!(!garen_archive.exists(), "Raw Garen archive must be deleted");
+    let garen_extracted = target_86000.join("Escanor Garen");
+    assert!(garen_extracted.is_dir());
+    // Direct child must be META and WAD, NOT an extra Escanor Garen wrapper
+    assert!(garen_extracted.join("META").join("info.json").exists());
+    assert!(garen_extracted.join("WAD").join("Garen.wad.client").exists());
+    assert!(!garen_extracted.join("Escanor Garen").exists(), "Wrapper folder must be flattened");
+
+    let garen_manifest_path = target_86000.join("rose_mod_targets.json");
+    assert!(garen_manifest_path.exists());
+    let garen_manifest: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&garen_manifest_path).unwrap()).unwrap();
+    assert_eq!(garen_manifest["championId"], 86);
+    assert_eq!(garen_manifest["targets"], serde_json::json!([86000]));
+
+    // 3. Check Volibear (already modern) remained untouched
+    assert!(voli_mod.exists());
+
+    // 4. Idempotency test: Re-running migration on the now-modern structure extracts 0 archives
+    let report2 = crate::migrate::migrate_outdated_rose_directory(skins_dir).unwrap();
+    assert_eq!(report2.extracted_archives, 0);
+}
+
+
 
