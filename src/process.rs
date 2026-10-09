@@ -36,11 +36,7 @@ pub fn detect_running_conflicting_processes() -> Vec<String> {
 
     let mut found = Vec::new();
     let targets = [
-        "leagueclient.exe",
-        "leagueclientux.exe",
         "league of legends.exe",
-        "riotclientservices.exe",
-        "rose.exe",
     ];
 
     unsafe {

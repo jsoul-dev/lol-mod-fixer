@@ -78,7 +78,7 @@ impl Printer {
             return;
         }
         println!("{}", "League Mod Fixer (LTK Repair Engine)".cyan().bold());
-        println!("{}", "=====================================".dark_cyan());
+        println!("{}", "====================================".dark_cyan());
         if let Some(d) = dir {
             println!("Directory: {}", d.display().to_string().white().bold());
         }
@@ -90,7 +90,7 @@ impl Printer {
                 "{} {}",
                 "[!] Warning:".yellow().bold(),
                 format!(
-                    "Detected running game/mod process(es): {}",
+                    "Detected running game process(es): {}",
                     running_procs.join(", ")
                 )
                 .white()
@@ -98,7 +98,7 @@ impl Printer {
             );
             println!(
                 "    {}",
-                "Please close League of Legends and Rose to avoid file lock conflicts."
+                "Please close League of Legends to avoid file lock conflicts."
                     .yellow()
             );
         }
