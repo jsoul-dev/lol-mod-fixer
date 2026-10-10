@@ -1,6 +1,6 @@
 [package]
 name = "lol-mod-fixer"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Standalone native CLI tool for League of Legends mod diagnosis and repair"
 license = "GPL-3.0-or-later"
