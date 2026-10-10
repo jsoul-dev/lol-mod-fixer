@@ -1,11 +1,15 @@
 # LoL Mod Fixer (`lol-mod-fixer`)
 
-[![CI](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml)
+[![Download Latest](https://img.shields.io/badge/Download-lol--mod--fixer.exe-2ea44f?style=flat-square&logo=windows)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest/download/lol-mod-fixer.exe)
 [![Release](https://img.shields.io/github/v/release/jsoul-dev/lol-mod-fixer?style=flat-square&color=blue)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
+[![CI](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, automatic name beautification, and legacy structure migration, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose](https://github.com/Alban1911/Rose) integration.
+
+> [!TIP]
+> **Direct Download**: [**`lol-mod-fixer.exe` (Latest Release)**](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest/download/lol-mod-fixer.exe) — Single standalone binary, zero dependencies required.
 
 `lol-mod-fixer` inspects mod packages headlessly using LTK Manager's real health and problems engine, reports detected property mismatches and outdated types, and repairs them using LTK Manager's actual repair and export pipeline without needing the Tauri desktop GUI.
 
@@ -65,8 +69,12 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 
 ### Pre-Built Binary (Zero Dependencies)
 
-The [latest release](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest) provides a single portable standalone binary:
+The quickest way to get started is to download the standalone executable:
 
+* **[Download `lol-mod-fixer.exe` (Latest Release)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest/download/lol-mod-fixer.exe)** *(always redirects to the newest `.exe`)*
+* Or view changelogs and previous builds on the [GitHub Releases page](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest).
+
+#### Binary Features:
 * **`lol-mod-fixer.exe`**:
   - Compiles with statically linked C runtime (`/MT` via `+crt-static`).
   - **Completely standalone**: runs out of the box on any clean Windows 10/11 system with **zero dependencies**—no Microsoft Visual C++ Redistributable (`vcruntime140.dll`), .NET, Python, or batch wrappers required.
@@ -136,9 +144,10 @@ Rose extracts and organizes all installed custom skins inside the user's Local A
 To repair, clean, and organize all skins already imported into Rose:
 
 #### Method A: Drop & Run (Recommended)
-1. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
-2. Copy `lol-mod-fixer.exe` into that `skins` folder.
-3. Right-click `lol-mod-fixer.exe` → **Run as administrator** (or double-click directly).
+1. Download [**`lol-mod-fixer.exe` (Latest Release)**](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest/download/lol-mod-fixer.exe).
+2. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
+3. Copy `lol-mod-fixer.exe` into that `skins` folder.
+4. Right-click `lol-mod-fixer.exe` → **Run as administrator** (or double-click directly).
 4. `lol-mod-fixer` will automatically:
    - Recursively scan all champion skin folders (e.g., `106000`, `33000`, `34000`).
    - Automatically unlock any restricted Rose permissions on the fly.
