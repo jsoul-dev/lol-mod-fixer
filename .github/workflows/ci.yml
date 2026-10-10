@@ -3,8 +3,22 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/scripts/**'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/update-upstream.yml'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/scripts/**'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/update-upstream.yml'
 
 jobs:
   test:
