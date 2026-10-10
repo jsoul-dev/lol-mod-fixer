@@ -39,7 +39,6 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path release-artifacts
           Copy-Item "target/release/lol-mod-fixer.exe" "release-artifacts/lol-mod-fixer.exe"
-          Copy-Item "scripts/run-fixer-as-admin.bat" "release-artifacts/run-fixer-as-admin.bat"
           Get-Item release-artifacts/*
 
       - name: Create GitHub Release
@@ -48,5 +47,4 @@ jobs:
         with:
           files: |
             release-artifacts/lol-mod-fixer.exe
-            release-artifacts/run-fixer-as-admin.bat
           generate_release_notes: true
