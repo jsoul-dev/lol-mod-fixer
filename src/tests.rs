@@ -1446,6 +1446,90 @@ fn test_rose_manifest_sync_when_mods_pasted() {
 }
 
 #[test]
+fn test_incremental_rose_manifest_preserves_hashes_and_prunes() {
+    let temp = tempfile::tempdir().unwrap();
+    let target_102000 = temp.path().join("102000");
+    fs_err::create_dir_all(&target_102000).unwrap();
+
+    // Create Mod 1
+    let mod1 = target_102000.join("Mod Alpha");
+    fs_err::create_dir_all(mod1.join("META")).unwrap();
+    fs_err::write(mod1.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(mod1.join("WAD")).unwrap();
+    fs_err::write(mod1.join("WAD").join("alpha.wad.client"), "content_alpha").unwrap();
+
+    // Initial build
+    let rebuilt = crate::migrate::rebuild_target_manifest(&target_102000, 102000).unwrap();
+    assert!(rebuilt);
+
+    let manifest_path = target_102000.join("rose_mod_targets.json");
+    let initial_json: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    let mod1_entry = initial_json["mods"]
+        .as_object()
+        .unwrap()
+        .values()
+        .find(|v| v["name"] == "Mod Alpha")
+        .unwrap()
+        .clone();
+    let initial_mod1_hash = mod1_entry["folderHash"].as_str().unwrap().to_string();
+
+    // Rebuild with no changes -> must return Ok(false) immediately
+    let no_change = crate::migrate::rebuild_target_manifest(&target_102000, 102000).unwrap();
+    assert!(!no_change, "Rebuild with zero changes must return false (no-op)");
+
+    // Paste Mod 2 and Mod 3
+    let mod2 = target_102000.join("Mod Beta");
+    fs_err::create_dir_all(mod2.join("META")).unwrap();
+    fs_err::write(mod2.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(mod2.join("WAD")).unwrap();
+    fs_err::write(mod2.join("WAD").join("beta.wad.client"), "content_beta").unwrap();
+
+    let mod3 = target_102000.join("Mod Gamma");
+    fs_err::create_dir_all(mod3.join("META")).unwrap();
+    fs_err::write(mod3.join("META").join("info.json"), "{}").unwrap();
+    fs_err::create_dir_all(mod3.join("WAD")).unwrap();
+    fs_err::write(mod3.join("WAD").join("gamma.wad.client"), "content_gamma").unwrap();
+
+    // Rebuild manifest -> must incrementally append new mods
+    let rebuilt_new = crate::migrate::rebuild_target_manifest(&target_102000, 102000).unwrap();
+    assert!(rebuilt_new, "Rebuild with new mods must update manifest");
+
+    let updated_json: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    let updated_mods = updated_json["mods"].as_object().unwrap();
+    assert_eq!(updated_mods.len(), 3);
+
+    // Verify Mod 1 preserved its exact original hash without recalculation
+    let preserved_mod1 = updated_mods
+        .values()
+        .find(|v| v["name"] == "Mod Alpha")
+        .unwrap();
+    assert_eq!(
+        preserved_mod1["folderHash"].as_str().unwrap(),
+        initial_mod1_hash,
+        "Mod Alpha's hash must be preserved incrementally"
+    );
+
+    // Running again without changes must be false
+    assert!(!crate::migrate::rebuild_target_manifest(&target_102000, 102000).unwrap());
+
+    // Delete Mod 2 from disk -> Rebuild must prune it
+    fs_err::remove_dir_all(&mod2).unwrap();
+    let pruned = crate::migrate::rebuild_target_manifest(&target_102000, 102000).unwrap();
+    assert!(pruned, "Deleting a mod from disk must trigger manifest update");
+
+    let pruned_json: serde_json::Value =
+        serde_json::from_str(&fs_err::read_to_string(&manifest_path).unwrap()).unwrap();
+    let pruned_mods = pruned_json["mods"].as_object().unwrap();
+    assert_eq!(pruned_mods.len(), 2);
+    let names: Vec<&str> = pruned_mods.values().map(|v| v["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"Mod Alpha"));
+    assert!(names.contains(&"Mod Gamma"));
+    assert!(!names.contains(&"Mod Beta"));
+}
+
+#[test]
 fn test_raw_fantome_folder_detection_and_beautification() {
     let temp = TempDir::new().unwrap();
     let skin_dir = temp.path().join("102000");

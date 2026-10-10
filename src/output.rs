@@ -91,6 +91,24 @@ impl Printer {
         println!();
     }
 
+    pub fn print_stage_status(&self, msg: &str) {
+        if self.json {
+            return;
+        }
+        println!("{} {}", "→".cyan().bold(), msg.white());
+    }
+
+    pub fn print_scan_status(&self, total: usize) {
+        if self.json {
+            return;
+        }
+        println!(
+            "{} Found {} mod(s). Initializing engine...\n",
+            "✓".green().bold(),
+            total.to_string().cyan().bold()
+        );
+    }
+
     pub fn print_check_item(&self, idx: usize, total: usize, report: &HealthReport) {
         if self.json {
             return;

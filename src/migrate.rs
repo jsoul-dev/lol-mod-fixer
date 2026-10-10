@@ -14,7 +14,7 @@
 //!    matching Rose's official hashing algorithm for full client and party mode injection support.
 //! 7. Leaves already updated structures (modern extracted folders) 100% untouched.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use camino::Utf8PathBuf;
 use ltk_mod_project::fantome::FantomeFormat;
@@ -297,11 +297,39 @@ pub fn rebuild_target_manifest(target_folder: &Path, target: u32) -> FixerResult
     if mod_folders.is_empty() {
         if json_path.exists() {
             let _ = fs_err::remove_file(&json_path);
+            return Ok(true);
         }
         return Ok(false);
     }
 
     mod_folders.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    // Read and parse existing manifest if present for fast-path incremental reuse
+    let existing_raw = if json_path.is_file() {
+        fs_err::read_to_string(&json_path).ok()
+    } else {
+        None
+    };
+
+    let existing_json: Option<serde_json::Value> = existing_raw
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok());
+
+    // Map existing entries by mod folder name with valid hashes
+    let mut existing_by_name: HashMap<String, serde_json::Value> = HashMap::new();
+    if let Some(existing) = &existing_json {
+        if let Some(mods_obj) = existing.get("mods").and_then(|m| m.as_object()) {
+            for (_key, val) in mods_obj {
+                if let Some(name) = val.get("name").and_then(|n| n.as_str()) {
+                    let has_valid_hashes = val.get("folderHash").and_then(|h| h.as_str()).is_some()
+                        && val.get("wadHashes").and_then(|w| w.as_object()).is_some();
+                    if has_valid_hashes {
+                        existing_by_name.insert(name.to_string(), val.clone());
+                    }
+                }
+            }
+        }
+    }
 
     let mut mods_map: BTreeMap<String, serde_json::Value> = BTreeMap::new();
 
@@ -312,6 +340,17 @@ pub fn rebuild_target_manifest(target_folder: &Path, target: u32) -> FixerResult
             .to_string_lossy()
             .to_string();
 
+        // Incremental optimization: If existing manifest already contains this mod with valid hashes, reuse it!
+        if let Some(existing_entry) = existing_by_name.get(&mod_name) {
+            if let Some(folder_hash) = existing_entry.get("folderHash").and_then(|h| h.as_str()) {
+                let mut entry = existing_entry.clone();
+                entry["targets"] = serde_json::json!([ target ]);
+                mods_map.insert(folder_hash.to_string(), entry);
+                continue;
+            }
+        }
+
+        // New or unregistered mod folder: calculate exact Rose hashes
         let (folder_hash, wad_hashes) = match compute_rose_hashes(&mod_dir) {
             Ok(res) => res,
             Err(e) => {
@@ -342,13 +381,9 @@ pub fn rebuild_target_manifest(target_folder: &Path, target: u32) -> FixerResult
     });
 
     // Check if the manifest on disk already matches exactly
-    if json_path.exists() {
-        if let Ok(existing_content) = fs_err::read_to_string(&json_path) {
-            if let Ok(existing_json) = serde_json::from_str::<serde_json::Value>(&existing_content) {
-                if existing_json == manifest_data {
-                    return Ok(false);
-                }
-            }
+    if let Some(existing) = &existing_json {
+        if existing == &manifest_data {
+            return Ok(false);
         }
     }
 

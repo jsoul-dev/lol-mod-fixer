@@ -63,6 +63,7 @@ pub fn execute_check(
             (vec![target_path.clone()], false)
         } else {
             printer.print_banner(Some(&target_path));
+            printer.print_stage_status("Scanning directory for mods...");
             let mut list = scan_directory(&target_path, recursive)?;
             if list.is_empty() && !recursive {
                 let sub_list = scan_directory(&target_path, true)?;
@@ -82,6 +83,10 @@ pub fn execute_check(
         }
         printer.print_check_summary(&[], if is_dir { Some(&target_path) } else { None });
         return Ok(exit_codes::SUCCESS);
+    }
+
+    if is_dir {
+        printer.print_scan_status(total);
     }
 
     for (idx, path) in candidates.iter().enumerate() {
@@ -198,6 +203,7 @@ pub fn execute_repair(
 
     // 0. Check for and migrate outdated Rose structure (.fantome/.zip archives in numeric skin folders)
     if migrate && !dry_run && crate::migrate::is_rose_skins_directory(&input_path) {
+        printer.print_stage_status("Checking Rose mod structure and manifests...");
         match crate::migrate::migrate_outdated_rose_directory(&input_path) {
             Ok(report) => printer.print_migration_summary(&report),
             Err(e) => tracing::warn!("Rose legacy migration notice: {e}"),
@@ -212,7 +218,7 @@ pub fn execute_repair(
         }
     }
 
-
+    printer.print_stage_status("Scanning directory for mods...");
     let mut candidates = scan_directory(&input_path, recursive)?;
     if candidates.is_empty() && !recursive {
         let sub_candidates = scan_directory(&input_path, true)?;
@@ -229,6 +235,7 @@ pub fn execute_repair(
             println!("No mod archives (.fantome, .modpkg, .wad.client) found.");
         }
     } else {
+        printer.print_scan_status(total);
         for (idx, path) in candidates.iter().enumerate() {
             let active_path = if beautify && crate::formats::is_fantome_folder(path) {
                 match crate::beautify::beautify_and_sync_folder(path) {
