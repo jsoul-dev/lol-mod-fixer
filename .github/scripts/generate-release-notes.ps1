@@ -14,7 +14,8 @@ $customNotes = ""
 if (Test-Path "RELEASE_NOTES.md") {
     $raw = [System.IO.File]::ReadAllText((Resolve-Path "RELEASE_NOTES.md"), [System.Text.Encoding]::UTF8)
     if ($raw.Trim().Length -gt 0) {
-        $customNotes = $raw.Trim()
+        $customNotes = ($raw -split "`r?`n" | Where-Object { $_ -notmatch '(?i)full changelog' }) -join "`n"
+        $customNotes = $customNotes.Trim()
     }
 }
 
