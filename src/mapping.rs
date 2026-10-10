@@ -60,7 +60,52 @@ pub struct MappingSummary {
     pub json_path: PathBuf,
 }
 
-/// Collect mappings for all skin directories present in `base_dir`.
+/// Check if a directory is a valid Rose skins root directory (containing numeric skin folders).
+pub fn is_rose_skins_root(dir: &Path) -> bool {
+    if !dir.is_dir() {
+        return false;
+    }
+
+    // A numeric folder (e.g. "800000", "421000") is an individual skin target, NOT the skins root!
+    let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    if name.chars().all(|c| c.is_ascii_digit()) && !name.is_empty() {
+        return false;
+    }
+
+    // A mod folder is NOT the skins root
+    if crate::formats::is_fantome_folder(dir)
+        || dir.join("META").is_dir()
+        || dir.join("meta").is_dir()
+    {
+        return false;
+    }
+
+    // Must contain at least one numeric skin target subdirectory (e.g. "106000", "800000")
+    if let Ok(entries) = fs_err::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            if entry.path().is_dir() {
+                let sub_name = entry.file_name().to_string_lossy().to_string();
+                if sub_name.chars().all(|c| c.is_ascii_digit()) && !sub_name.is_empty() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Or if the directory path explicitly ends with "rose\mods\skins" or "rose/mods/skins"
+    let path_str = dir.to_string_lossy().to_ascii_lowercase();
+    if path_str.ends_with("rose\\mods\\skins")
+        || path_str.ends_with("rose/mods/skins")
+        || path_str.ends_with("rose\\mods\\skins\\")
+        || path_str.ends_with("rose/mods/skins/")
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Collect mappings for all numeric skin directories present in `base_dir`.
 pub fn collect_mappings(base_dir: &Path) -> FixerResult<Vec<ModFolderMapping>> {
     let mut mappings = Vec::new();
 
@@ -87,7 +132,11 @@ pub fn collect_mappings(base_dir: &Path) -> FixerResult<Vec<ModFolderMapping>> {
             continue;
         }
 
-        let skin_id = folder_name.parse::<u32>().ok();
+        // Skin target directories in Rose MUST be numeric skin IDs (e.g. "106000", "800000")
+        let skin_id = match folder_name.parse::<u32>() {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
 
         // Check if this folder contains mods or Rose target manifests
         let mut mods = Vec::new();
@@ -124,36 +173,24 @@ pub fn collect_mappings(base_dir: &Path) -> FixerResult<Vec<ModFolderMapping>> {
 
         mods.sort_by(|a, b| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()));
 
-        let (champion_id, champion, skin, is_base_skin) = if let Some(id) = skin_id {
-            let cid = id / 1000;
-            let champ = champion_by_id(id).unwrap_or("Unknown Champion");
-            let sk = skin_by_id(id).unwrap_or(champ);
-            let is_base = id % 1000 == 0;
-            (Some(cid), champ.to_string(), sk.to_string(), is_base)
-        } else {
-            let champ = crate::champions::detect_champion(None, &folder_name, None, &[])
-                .unwrap_or("Custom Mod");
-            (None, champ.to_string(), folder_name.clone(), false)
-        };
+        let cid = skin_id / 1000;
+        let champ = champion_by_id(skin_id).unwrap_or("Unknown Champion");
+        let sk = skin_by_id(skin_id).unwrap_or(champ);
+        let is_base = skin_id % 1000 == 0;
 
         mappings.push(ModFolderMapping {
             folder: folder_name,
-            skin_id,
-            champion_id,
-            champion,
-            skin,
-            is_base_skin,
+            skin_id: Some(skin_id),
+            champion_id: Some(cid),
+            champion: champ.to_string(),
+            skin: sk.to_string(),
+            is_base_skin: is_base,
             mods,
         });
     }
 
-    // Sort folders numerically if skin_id is present, otherwise by name
-    mappings.sort_by(|a, b| match (a.skin_id, b.skin_id) {
-        (Some(ida), Some(idb)) => ida.cmp(&idb),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => a.folder.cmp(&b.folder),
-    });
+    // Sort folders numerically
+    mappings.sort_by_key(|m| m.skin_id);
 
     Ok(mappings)
 }
@@ -224,13 +261,40 @@ pub fn format_mappings_txt(
 ///
 /// Returns `Ok(Some(summary))` if mappings were generated, or `Ok(None)` if no skin folders were found.
 pub fn generate_skin_mappings(base_dir: &Path) -> FixerResult<Option<MappingSummary>> {
-    let mappings = collect_mappings(base_dir)?;
+    let base_name = base_dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let is_base_numeric = base_name.chars().all(|c| c.is_ascii_digit()) && !base_name.is_empty();
+
+    // If base_dir is a numeric skin folder (e.g. 800000, 421000), remove any misplaced mapping files and never generate here
+    if is_base_numeric {
+        let txt_path = base_dir.join(MAPPING_TXT_FILENAME);
+        let json_path = base_dir.join(MAPPING_JSON_FILENAME);
+        if txt_path.is_file() {
+            let _ = fs_err::remove_file(&txt_path);
+        }
+        if json_path.is_file() {
+            let _ = fs_err::remove_file(&json_path);
+        }
+        return Ok(None);
+    }
+
+    // Only generate mappings if base_dir is a valid Rose skins root directory
+    if !is_rose_skins_root(base_dir) {
+        return Ok(None);
+    }
 
     let txt_path = base_dir.join(MAPPING_TXT_FILENAME);
     let json_path = base_dir.join(MAPPING_JSON_FILENAME);
 
-    // If no skin folders exist, don't generate files unless previous files existed
-    if mappings.is_empty() && !txt_path.exists() && !json_path.exists() {
+    let mappings = collect_mappings(base_dir)?;
+
+    // If no skin folders exist, clean up any existing mapping files and return None
+    if mappings.is_empty() {
+        if txt_path.is_file() {
+            let _ = fs_err::remove_file(&txt_path);
+        }
+        if json_path.is_file() {
+            let _ = fs_err::remove_file(&json_path);
+        }
         return Ok(None);
     }
 

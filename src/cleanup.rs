@@ -281,6 +281,16 @@ pub fn cleanup_empty_rose_folders(base_dir: &Path) -> FixerResult<CleanupReport>
     });
 
     for target_dir in target_dirs {
+        // Clean any misplaced skin_mappings.txt or skin_mappings.json inside individual target directories
+        let stray_txt = target_dir.join(crate::mapping::MAPPING_TXT_FILENAME);
+        let stray_json = target_dir.join(crate::mapping::MAPPING_JSON_FILENAME);
+        if stray_txt.is_file() {
+            let _ = force_remove_file(&stray_txt);
+        }
+        if stray_json.is_file() {
+            let _ = force_remove_file(&stray_json);
+        }
+
         // Step 1: Clean empty mod subdirectories inside this target directory
         if let Ok(entries) = fs_err::read_dir(&target_dir) {
             for entry in entries.filter_map(|e| e.ok()) {

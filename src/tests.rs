@@ -1018,6 +1018,39 @@ fn test_generate_skin_mappings_sync() {
 }
 
 #[test]
+fn test_skin_mappings_never_generated_in_numeric_folder_and_stray_files_deleted() {
+    let temp = TempDir::new().unwrap();
+    let target_800000 = temp.path().join("800000");
+    fs_err::create_dir_all(&target_800000).unwrap();
+
+    let mod_dir = target_800000.join("Gojo Mel v1.0");
+    fs_err::create_dir_all(&mod_dir).unwrap();
+    fs_err::write(mod_dir.join("info.json"), b"{}").unwrap();
+
+    // Simulate stray mapping files previously generated in 800000
+    let stray_txt = target_800000.join(crate::mapping::MAPPING_TXT_FILENAME);
+    let stray_json = target_800000.join(crate::mapping::MAPPING_JSON_FILENAME);
+    fs_err::write(&stray_txt, b"stray mappings txt").unwrap();
+    fs_err::write(&stray_json, b"{}").unwrap();
+
+    assert!(stray_txt.exists());
+    assert!(stray_json.exists());
+
+    // Calling generate_skin_mappings directly on a numeric folder must return Ok(None) and remove stray files
+    let res = crate::mapping::generate_skin_mappings(&target_800000).unwrap();
+    assert!(res.is_none(), "Skin mappings must NEVER be generated in a numeric folder");
+    assert!(!stray_txt.exists(), "Stray skin_mappings.txt must be deleted from numeric folder");
+    assert!(!stray_json.exists(), "Stray skin_mappings.json must be deleted from numeric folder");
+
+    // Also test cleanup pass removes stray files if they reappear
+    fs_err::write(&stray_txt, b"stray").unwrap();
+    fs_err::write(&stray_json, b"stray").unwrap();
+    let _ = crate::cleanup::cleanup_empty_rose_folders(&target_800000).unwrap();
+    assert!(!stray_txt.exists(), "Cleanup pass must remove stray skin_mappings.txt");
+    assert!(!stray_json.exists(), "Cleanup pass must remove stray skin_mappings.json");
+}
+
+#[test]
 fn test_migrate_outdated_rose_directory() {
     use std::io::Write;
     let temp = TempDir::new().unwrap();
