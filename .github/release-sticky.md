@@ -1,4 +1,4 @@
-### 📌 Quick Start (How to Use with Rose)
+### Quick Start (How to Use with Rose)
 
 1. Press `Win + R`, paste `%LOCALAPPDATA%\Rose\mods\skins`, and press **Enter**.
 2. Copy **`lol-mod-fixer.exe`** into that `skins` folder.
@@ -15,7 +15,7 @@
 
 ---
 
-### 📦 Release Asset (Zero Dependencies)
+### Release Asset (Zero Dependencies)
 
 | Asset | Description |
 | :--- | :--- |
