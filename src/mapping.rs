@@ -203,12 +203,12 @@ pub fn format_mappings_txt(
             for (idx, mod_name) in item.mods.iter().enumerate() {
                 if idx == 0 {
                     txt.push_str(&format!(
-                        "{:<12} {:<20} {:<28} • {}\n",
+                        "{:<12} {:<20} {:<28} - {}\n",
                         folder_id_str, champ_str, skin_display, mod_name
                     ));
                 } else {
                     txt.push_str(&format!(
-                        "{:<12} {:<20} {:<28} • {}\n",
+                        "{:<12} {:<20} {:<28} - {}\n",
                         "", "", "", mod_name
                     ));
                 }

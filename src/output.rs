@@ -95,7 +95,7 @@ impl Printer {
         if self.json {
             return;
         }
-        println!("{} {}", "→".cyan().bold(), msg.white());
+        println!("{} {}", "->".cyan().bold(), msg.white());
     }
 
     pub fn print_scan_status(&self, total: usize) {
@@ -104,7 +104,7 @@ impl Printer {
         }
         println!(
             "{} Found {} mod(s). Initializing engine...\n",
-            "✓".green().bold(),
+            "[+]".green().bold(),
             total.to_string().cyan().bold()
         );
     }
@@ -654,34 +654,34 @@ impl Printer {
         if report.extracted_archives > 0 {
             println!(
                 "  {} Migrated and extracted {} archive(s) into modern Rose folders",
-                "✓".green().bold(),
+                "[OK]".green().bold(),
                 report.extracted_archives.to_string().yellow().bold()
             );
         }
         if report.manifests_rebuilt > 0 {
             println!(
                 "  {} Built/synchronized {} rose_mod_targets.json manifest(s)",
-                "✓".green().bold(),
+                "[OK]".green().bold(),
                 report.manifests_rebuilt.to_string().cyan().bold()
             );
         }
         if report.skipped_archives > 0 {
             println!(
                 "  {} Skipped {} archive(s) already extracted",
-                "•".dark_grey(),
+                "[-]".dark_grey(),
                 report.skipped_archives.to_string().dark_grey()
             );
         }
         if !report.failed_archives.is_empty() {
             println!(
                 "  {} {} archive(s) failed extraction",
-                "✗".red().bold(),
+                "[X]".red().bold(),
                 report.failed_archives.len().to_string().red().bold()
             );
             for (name, reason) in &report.failed_archives {
                 println!(
                     "    {} {}: {}",
-                    "•".dark_grey(),
+                    "[-]".dark_grey(),
                     name.as_str().white().bold(),
                     reason.as_str().yellow()
                 );
@@ -699,28 +699,28 @@ impl Printer {
         if report.deleted_targets > 0 {
             println!(
                 "  {} Deleted {} empty/orphan target folder(s)",
-                "✓".green().bold(),
+                "[OK]".green().bold(),
                 report.deleted_targets.to_string().yellow().bold()
             );
         }
         if report.deleted_mods > 0 {
             println!(
                 "  {} Deleted {} empty mod folder(s)",
-                "✓".green().bold(),
+                "[OK]".green().bold(),
                 report.deleted_mods.to_string().yellow().bold()
             );
         }
         if report.deleted_hematite_fixed > 0 {
             println!(
                 "  {} Deleted {} empty Hematite-Fixed folder(s)",
-                "✓".green().bold(),
+                "[OK]".green().bold(),
                 report.deleted_hematite_fixed.to_string().yellow().bold()
             );
         }
         if report.deleted_empty_subdirs > 0 {
             println!(
                 "  {} Deleted {} empty internal mod subfolder(s) (e.g. empty META/hashes)",
-                "✓".green().bold(),
+                "[OK]".green().bold(),
                 report.deleted_empty_subdirs.to_string().yellow().bold()
             );
         }
@@ -735,18 +735,18 @@ impl Printer {
         println!("{}", "--- Skin ID Mappings Generated ---".dark_grey());
         println!(
             "  {} Mapped {} skin folder(s) with {} installed mod(s)",
-            "✓".green().bold(),
+            "[OK]".green().bold(),
             summary.total_folders.to_string().cyan().bold(),
             summary.total_mods.to_string().cyan().bold()
         );
         println!(
             "  {} Text file : {}",
-            "•".dark_grey(),
+            "[-]".dark_grey(),
             summary.txt_path.file_name().unwrap_or_default().to_string_lossy().white()
         );
         println!(
             "  {} JSON file : {}",
-            "•".dark_grey(),
+            "[-]".dark_grey(),
             summary.json_path.file_name().unwrap_or_default().to_string_lossy().white()
         );
         println!();
