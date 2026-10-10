@@ -122,6 +122,9 @@ To automatically unlock and repair all protected folders:
 
 `lol-mod-fixer` will automatically take ownership, reset access control lists (ACLs), repair all mods, beautify folder names, and update `rose_mod_targets.json`.
 
+> [!NOTE]
+> If you run the tool without elevation and see a warning indicating locked or inaccessible files (`os error 5: Access is denied` or `os error 32`), re-run as Administrator so `lol-mod-fixer` can automatically unlock permissions and repair all files.
+
 ### 3. How to Use with Rose (Fix Already-Imported Skins)
 
 Rose extracts and organizes all installed custom skins inside the user's Local AppData directory:

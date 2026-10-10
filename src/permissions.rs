@@ -18,6 +18,18 @@ pub fn is_elevated() -> bool {
     false
 }
 
+/// Check if an error message string indicates a permission denied or file locking error.
+pub fn is_lock_or_permission_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("os error 5")
+        || lower.contains("access is denied")
+        || lower.contains("os error 32")
+        || lower.contains("used by another process")
+        || lower.contains("sharing violation")
+        || lower.contains("permission denied")
+        || lower.contains("locked")
+}
+
 #[cfg(windows)]
 fn run_command_with_timeout(
     mut cmd: std::process::Command,

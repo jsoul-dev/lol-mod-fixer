@@ -53,6 +53,7 @@ pub fn execute_check(
     beautify: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
+    crate::scanner::reset_restricted_count();
     let (config, _) = resolve_ltk_config(cli_league, None);
     let target_path = target.unwrap_or_else(resolve_default_dir);
 
@@ -128,6 +129,7 @@ pub fn execute_repair(
     delete_unrepairable: bool,
     printer: &Printer,
 ) -> FixerResult<i32> {
+    crate::scanner::reset_restricted_count();
     let (config, _) = resolve_ltk_config(cli_league, None);
     let input_path = input.unwrap_or_else(resolve_default_dir);
 

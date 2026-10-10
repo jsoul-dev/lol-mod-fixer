@@ -158,6 +158,16 @@ fn main() -> ExitCode {
                 println!("{err_json}");
             } else {
                 eprintln!("\nError: {e}");
+                if !permissions::is_elevated() && permissions::is_lock_or_permission_error(&e.to_string()) {
+                    use crossterm::style::Stylize;
+                    eprintln!(
+                        "\n{} This file or folder is locked or restricted by Windows permissions.",
+                        "[!] Note:".yellow().bold()
+                    );
+                    eprintln!("    To unlock and access it, run as Administrator:");
+                    eprintln!("    -> Right-click lol-mod-fixer.exe and select 'Run as administrator', OR");
+                    eprintln!("    -> Run with: lol-mod-fixer.exe --elevate");
+                }
             }
             exit_codes::REPAIRABLE_OR_FAILED
         }

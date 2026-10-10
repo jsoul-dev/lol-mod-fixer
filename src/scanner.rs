@@ -1,10 +1,25 @@
 //! Directory scanning and mod file discovery.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use walkdir::WalkDir;
 
 use crate::error::FixerResult;
 use crate::formats::{ModFormat, is_fantome_folder};
+
+static RESTRICTED_FILES_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+pub fn record_restricted_file() {
+    RESTRICTED_FILES_COUNT.fetch_add(1, Ordering::Relaxed);
+}
+
+pub fn get_restricted_count() -> usize {
+    RESTRICTED_FILES_COUNT.load(Ordering::Relaxed)
+}
+
+pub fn reset_restricted_count() {
+    RESTRICTED_FILES_COUNT.store(0, Ordering::Relaxed);
+}
 
 /// Resolve the default directory to scan.
 ///
@@ -62,15 +77,18 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
     let mut restricted_count = 0;
 
     // Only attempt to unlock the root directory if we encounter access restriction on it
-    if crate::permissions::is_elevated() {
-        let is_restricted = match fs_err::read_dir(dir) {
-            Ok(_) => false,
-            Err(e) => {
-                let err = e.to_string();
-                err.contains("os error 5") || err.contains("Access is denied")
-            }
-        };
-        if is_restricted {
+    let root_restricted = match fs_err::read_dir(dir) {
+        Ok(_) => false,
+        Err(e) => {
+            let err = e.to_string();
+            crate::permissions::is_lock_or_permission_error(&err)
+        }
+    };
+
+    if root_restricted {
+        restricted_count += 1;
+        record_restricted_file();
+        if crate::permissions::is_elevated() {
             crate::permissions::unlock_folder_permissions(dir);
         }
     }
@@ -82,8 +100,9 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
                 Ok(e) => e,
                 Err(e) => {
                     let err_msg = e.to_string();
-                    if err_msg.contains("os error 5") || err_msg.contains("Access is denied") {
+                    if crate::permissions::is_lock_or_permission_error(&err_msg) {
                         restricted_count += 1;
+                        record_restricted_file();
                         if crate::permissions::is_elevated() {
                             if let Some(err_path) = e.path() {
                                 crate::permissions::unlock_folder_permissions(err_path);
@@ -117,20 +136,31 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
                 candidates.push(path.to_path_buf());
             }
         }
-    } else if let Ok(read_dir) = fs_err::read_dir(dir) {
-        for entry in read_dir.filter_map(Result::ok) {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.')
-                || name.eq_ignore_ascii_case("hematite-fixed")
-                || name.eq_ignore_ascii_case("backup")
-            {
-                continue;
+    } else {
+        match fs_err::read_dir(dir) {
+            Ok(read_dir) => {
+                for entry in read_dir.filter_map(Result::ok) {
+                    let path = entry.path();
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with('.')
+                        || name.eq_ignore_ascii_case("hematite-fixed")
+                        || name.eq_ignore_ascii_case("backup")
+                    {
+                        continue;
+                    }
+                    if (path.is_dir() && is_fantome_folder(&path))
+                        || (path.is_file() && is_candidate_file(&path))
+                    {
+                        candidates.push(path);
+                    }
+                }
             }
-            if (path.is_dir() && is_fantome_folder(&path))
-                || (path.is_file() && is_candidate_file(&path))
-            {
-                candidates.push(path);
+            Err(e) => {
+                let err_msg = e.to_string();
+                if crate::permissions::is_lock_or_permission_error(&err_msg) {
+                    restricted_count += 1;
+                    record_restricted_file();
+                }
             }
         }
     }
@@ -138,11 +168,11 @@ pub fn scan_directory(dir: &Path, recursive: bool) -> FixerResult<Vec<PathBuf>> 
     if restricted_count > 0 && !crate::permissions::is_elevated() {
         use crossterm::style::Stylize;
         eprintln!(
-            "{} {} folder(s) were inaccessible due to Windows/Rose permissions.",
-            "[!] Notice:".yellow().bold(),
+            "{} {} item(s) were locked or inaccessible due to Windows permissions.",
+            "[!] Warning:".yellow().bold(),
             restricted_count.to_string().white().bold()
         );
-        eprintln!("    To automatically unlock and repair all folders, run as Administrator:");
+        eprintln!("    To unlock and access all files, run as Administrator:");
         eprintln!("    -> Right-click lol-mod-fixer.exe and select 'Run as administrator', OR");
         eprintln!("    -> Run with: lol-mod-fixer.exe --elevate\n");
     }

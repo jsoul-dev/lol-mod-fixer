@@ -1577,6 +1577,29 @@ fn test_non_mod_files_and_documents_ignored_and_untouched() {
     assert!(found.is_empty(), "Expected 0 candidates, found: {:?}", found);
 }
 
+#[test]
+fn test_lock_or_permission_error_detection_and_tracking() {
+    use crate::permissions::is_lock_or_permission_error;
+    use crate::scanner::{get_restricted_count, record_restricted_file, reset_restricted_count};
+
+    assert!(is_lock_or_permission_error("os error 5: Access is denied"));
+    assert!(is_lock_or_permission_error("Failed to open file: Access is denied (os error 5)"));
+    assert!(is_lock_or_permission_error("os error 32: The process cannot access the file because it is being used by another process"));
+    assert!(is_lock_or_permission_error("Permission denied (os error 13)"));
+    assert!(is_lock_or_permission_error("sharing violation"));
+    assert!(is_lock_or_permission_error("File is locked"));
+    assert!(!is_lock_or_permission_error("File not found (os error 2)"));
+    assert!(!is_lock_or_permission_error("Corrupted zip archive: bad CRC"));
+
+    reset_restricted_count();
+    assert_eq!(get_restricted_count(), 0);
+    record_restricted_file();
+    record_restricted_file();
+    assert_eq!(get_restricted_count(), 2);
+    reset_restricted_count();
+    assert_eq!(get_restricted_count(), 0);
+}
+
 
 
 

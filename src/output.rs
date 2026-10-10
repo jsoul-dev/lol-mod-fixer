@@ -380,6 +380,25 @@ impl Printer {
                 unsupported.to_string().dark_grey()
             }
         );
+
+        let locked_encountered = crate::scanner::get_restricted_count() > 0
+            || reports.iter().any(|r| {
+                r.reason
+                    .as_deref()
+                    .map(crate::permissions::is_lock_or_permission_error)
+                    .unwrap_or(false)
+            });
+
+        if !crate::permissions::is_elevated() && locked_encountered {
+            println!();
+            println!(
+                "{} Locked or inaccessible files were detected.",
+                "[!] Note:".yellow().bold()
+            );
+            println!("    To unlock and access all mod files, run as Administrator:");
+            println!("    -> Right-click lol-mod-fixer.exe and select 'Run as administrator', OR");
+            println!("    -> Run with: lol-mod-fixer.exe --elevate");
+        }
     }
 
     pub fn print_repair_summary(&self, results: &[RepairResult], dir: Option<&Path>) {
@@ -585,6 +604,28 @@ impl Printer {
                 unsupported.to_string().dark_grey()
             }
         );
+
+        let locked_encountered = crate::scanner::get_restricted_count() > 0
+            || results.iter().any(|r| match r {
+                RepairResult::Failed { error, .. } => {
+                    crate::permissions::is_lock_or_permission_error(error)
+                }
+                RepairResult::Unrepairable { reason, .. } => {
+                    crate::permissions::is_lock_or_permission_error(reason)
+                }
+                _ => false,
+            });
+
+        if !crate::permissions::is_elevated() && locked_encountered {
+            println!();
+            println!(
+                "{} Locked or inaccessible files were detected.",
+                "[!] Note:".yellow().bold()
+            );
+            println!("    To unlock and access all mod files, run as Administrator:");
+            println!("    -> Right-click lol-mod-fixer.exe and select 'Run as administrator', OR");
+            println!("    -> Run with: lol-mod-fixer.exe --elevate");
+        }
     }
 
     pub fn print_migration_summary(&self, report: &crate::migrate::MigrationReport) {
