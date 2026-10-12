@@ -66,6 +66,12 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
         return true;
     }
 
+    let dir_name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
     // Check if base_dir contains numeric subdirectories
     if let Ok(entries) = fs_err::read_dir(dir) {
         for entry in entries.filter_map(|e| e.ok()) {
@@ -73,7 +79,12 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
                 if name.chars().all(|c| c.is_ascii_digit()) && !name.is_empty() {
-                    // Check if numeric folder contains archives or rose manifests
+                    // If the folder is named "skins" and contains numeric subdirectories, it's definitely Rose skins!
+                    if dir_name == "skins" {
+                        return true;
+                    }
+
+                    // Check if numeric folder contains archives, rose manifests, or extracted mod folders
                     if let Ok(sub_entries) = fs_err::read_dir(&p) {
                         for sub in sub_entries.filter_map(|e| e.ok()) {
                             let sub_name = sub.file_name().to_string_lossy().to_ascii_lowercase();
@@ -81,6 +92,7 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
                                 || sub_name.ends_with(".fantome")
                                 || sub_name.ends_with(".zip")
                                 || sub_name.ends_with(".modpkg")
+                                || (sub.path().is_dir() && crate::formats::is_fantome_folder(&sub.path()))
                             {
                                 return true;
                             }
@@ -92,6 +104,34 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
     }
 
     false
+}
+
+/// Resolve the effective scan directory.
+///
+/// If `dir` is a directory that is not itself a Rose skins root, but contains
+/// a `skins` subfolder (or `mods/skins`) that is a valid Rose structure,
+/// returns the `skins` subfolder path so the fixer seamlessly operates on the
+/// actual Rose mods root.
+pub fn resolve_effective_scan_dir(dir: PathBuf) -> PathBuf {
+    if !dir.is_dir() {
+        return dir;
+    }
+
+    if is_rose_skins_directory(&dir) {
+        return dir;
+    }
+
+    let skins_sub = dir.join("skins");
+    if skins_sub.is_dir() && is_rose_skins_directory(&skins_sub) {
+        return skins_sub;
+    }
+
+    let mods_skins_sub = dir.join("mods").join("skins");
+    if mods_skins_sub.is_dir() && is_rose_skins_directory(&mods_skins_sub) {
+        return mods_skins_sub;
+    }
+
+    dir
 }
 
 /// Safely extract a zip or fantome archive into destination.

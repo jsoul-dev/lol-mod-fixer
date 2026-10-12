@@ -1859,6 +1859,43 @@ fn test_repair_scans_and_beautifies_standalone_archives() {
     assert!(expected_new.exists(), "Archive must now be beautified on disk");
 }
 
+#[test]
+fn test_resolve_effective_scan_dir_subfolder_detection() {
+    let temp = TempDir::new().unwrap();
+
+    // 1. pepperpotts parent directory containing skins/119000
+    let pepperpotts = temp.path().join("pepperpotts");
+    let pepperpotts_skins = pepperpotts.join("skins");
+    let target_119000 = pepperpotts_skins.join("119000");
+    fs_err::create_dir_all(&target_119000).unwrap();
+    fs_err::write(target_119000.join("rose_mod_targets.json"), b"{}").unwrap();
+
+    assert!(crate::migrate::is_rose_skins_directory(&pepperpotts_skins));
+    let resolved = crate::migrate::resolve_effective_scan_dir(pepperpotts.clone());
+    assert_eq!(resolved, pepperpotts_skins, "Must automatically redirect to skins subfolder");
+
+    // 2. Rose/mods parent directory containing skins/421000
+    let rose_mods = temp.path().join("Rose").join("mods");
+    let rose_skins = rose_mods.join("skins");
+    let target_421000 = rose_skins.join("421000");
+    fs_err::create_dir_all(&target_421000).unwrap();
+    fs_err::write(target_421000.join("The_Warden_Rek_Sai-Default.fantome"), b"dummy").unwrap();
+
+    assert!(crate::migrate::is_rose_skins_directory(&rose_skins));
+    let resolved_mods = crate::migrate::resolve_effective_scan_dir(rose_mods.clone());
+    assert_eq!(resolved_mods, rose_skins, "Must automatically redirect Rose/mods to Rose/mods/skins");
+
+    // 3. Directly scanning skins/ returns skins/ unchanged
+    let resolved_direct = crate::migrate::resolve_effective_scan_dir(pepperpotts_skins.clone());
+    assert_eq!(resolved_direct, pepperpotts_skins);
+
+    // 4. Arbitrary directory without skins subfolder returns itself
+    let arbitrary = temp.path().join("arbitrary");
+    fs_err::create_dir_all(&arbitrary).unwrap();
+    let resolved_arb = crate::migrate::resolve_effective_scan_dir(arbitrary.clone());
+    assert_eq!(resolved_arb, arbitrary);
+}
+
 
 
 

@@ -187,6 +187,15 @@ impl Printer {
         println!();
     }
 
+    fn format_quarantine_path(path: &Path) -> String {
+        let path_str = path.to_string_lossy();
+        if let Some(idx) = path_str.find(".broken") {
+            path_str[idx..].to_string()
+        } else {
+            path.display().to_string()
+        }
+    }
+
     pub fn print_repair_item(&self, idx: usize, total: usize, res: &RepairResult) {
         if self.json {
             return;
@@ -252,7 +261,7 @@ impl Printer {
                 if let Some(q_path) = quarantined {
                     println!("      Status: {}", "UNREPAIRABLE (QUARANTINED)".yellow().bold());
                     println!("      Reason: {}", reason.as_str().yellow());
-                    println!("      Quarantined: {}", format!("Moved to {}", q_path.display()).cyan());
+                    println!("      Quarantined: {}", format!("Moved to {}", Self::format_quarantine_path(q_path)).cyan());
                 } else if *deleted {
                     println!("      Status: {}", "UNREPAIRABLE (CLEANED)".red().bold());
                     println!("      Reason: {}", reason.as_str().yellow());
@@ -296,7 +305,7 @@ impl Printer {
                 if let Some(q_path) = quarantined {
                     println!("      Status: {}", "CORRUPTED / FAILED (QUARANTINED)".red().bold());
                     println!("      Reason: {}", error.as_str().red());
-                    println!("      Quarantined: {}", format!("Moved to {}", q_path.display()).cyan());
+                    println!("      Quarantined: {}", format!("Moved to {}", Self::format_quarantine_path(q_path)).cyan());
                 } else if *deleted {
                     println!("      Status: {}", "CORRUPTED / FAILED (CLEANED)".red().bold());
                     println!("      Reason: {}", error.as_str().red());

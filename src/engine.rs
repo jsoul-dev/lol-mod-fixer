@@ -55,7 +55,7 @@ pub fn execute_check(
 ) -> FixerResult<i32> {
     crate::scanner::reset_restricted_count();
     let (config, _) = resolve_ltk_config(cli_league, None);
-    let target_path = target.unwrap_or_else(resolve_default_dir);
+    let target_path = crate::migrate::resolve_effective_scan_dir(target.unwrap_or_else(resolve_default_dir));
 
     let (candidates, is_dir) =
         if target_path.is_file() || crate::formats::is_fantome_folder(&target_path) {
@@ -136,7 +136,7 @@ pub fn execute_repair(
 ) -> FixerResult<i32> {
     crate::scanner::reset_restricted_count();
     let (config, _) = resolve_ltk_config(cli_league, None);
-    let input_path = input.unwrap_or_else(resolve_default_dir);
+    let input_path = crate::migrate::resolve_effective_scan_dir(input.unwrap_or_else(resolve_default_dir));
 
     if input_path.is_file() || crate::formats::is_fantome_folder(&input_path) {
         // Single file or extracted mod folder repair
