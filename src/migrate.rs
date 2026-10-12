@@ -192,6 +192,16 @@ pub fn find_rose_skins_directories(dir: &Path) -> Vec<PathBuf> {
                     if sub_mods_skins.is_dir() && is_rose_skins_directory(&sub_mods_skins) && !results.contains(&sub_mods_skins) {
                         results.push(sub_mods_skins);
                     }
+
+                    // Also check if p contains any custom-named Rose subfolder (e.g. "pepperpotts/skins22")
+                    if let Ok(sub_entries) = fs_err::read_dir(&p) {
+                        for sub_entry in sub_entries.filter_map(|e| e.ok()) {
+                            let sub_p = sub_entry.path();
+                            if sub_p.is_dir() && is_rose_skins_directory(&sub_p) && !results.contains(&sub_p) {
+                                results.push(sub_p);
+                            }
+                        }
+                    }
                 }
             }
         }

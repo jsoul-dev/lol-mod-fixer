@@ -2017,6 +2017,82 @@ fn test_mixed_directory_and_multi_rose_directory_structures() {
     assert_eq!(resolved_now_empty, rose_sub, "When no mods outside rose_sub, redirect to rose_sub");
 }
 
+#[test]
+fn test_combined_all_edge_cases_scenario() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().join("mega_root");
+    fs_err::create_dir_all(&root).unwrap();
+
+    // 1. Loose files beside exe
+    let loose1 = root.join("Standalone.modpkg");
+    fs_err::write(&loose1, b"loose pkg").unwrap();
+    let loose2 = root.join("LooseSkin.fantome");
+    fs_err::write(&loose2, b"loose fantome").unwrap();
+
+    // 2. Non-mod folder (documentation)
+    let docs = root.join("docs");
+    fs_err::create_dir_all(&docs).unwrap();
+    fs_err::write(docs.join("manual.pdf"), b"pdf content").unwrap();
+
+    // 3. Normal skins folder (not Rose structure)
+    let normal = root.join("normal_skins");
+    fs_err::create_dir_all(&normal).unwrap();
+    let normal_mod = normal.join("CustomSkin.fantome");
+    fs_err::write(&normal_mod, b"custom skin").unwrap();
+
+    // 4. Rose structure 1: wooshh/skins
+    let wooshh = root.join("wooshh").join("skins");
+    let wooshh_target = wooshh.join("119000");
+    fs_err::create_dir_all(&wooshh_target).unwrap();
+    fs_err::write(wooshh_target.join("rose_mod_targets.json"), b"{}").unwrap();
+    let wooshh_mod = wooshh_target.join("WooshDraven.fantome");
+    fs_err::write(&wooshh_mod, b"woosh draven").unwrap();
+
+    // 5. Rose structure 2: pepperpotts/skins22 (custom renamed Rose folder)
+    let pepper = root.join("pepperpotts").join("skins22");
+    let pepper_target = pepper.join("421000");
+    fs_err::create_dir_all(&pepper_target).unwrap();
+    fs_err::write(pepper_target.join("rose_mod_targets.json"), b"{}").unwrap();
+    let pepper_mod = pepper_target.join("RekSai.fantome");
+    fs_err::write(&pepper_mod, b"reksai").unwrap();
+
+    // Check target directory resolution
+    let resolved = crate::migrate::resolve_effective_scan_dir(root.clone());
+    assert_eq!(resolved, root, "Must retain mega_root so no files or folders are dropped");
+
+    // Check candidate scanning discovers all 5 mods across all locations
+    let candidates = crate::scanner::scan_directory(&root, true).unwrap();
+    assert_eq!(candidates.len(), 5, "Must discover all 5 mods across all mixed locations");
+    assert!(candidates.contains(&loose1));
+    assert!(candidates.contains(&loose2));
+    assert!(candidates.contains(&normal_mod));
+    assert!(candidates.contains(&wooshh_mod));
+    assert!(candidates.contains(&pepper_mod));
+
+    // Check Rose roots discovery finds exactly the 2 Rose structures
+    let rose_roots = crate::migrate::find_rose_skins_directories(&root);
+    assert_eq!(rose_roots.len(), 2);
+    assert!(rose_roots.contains(&wooshh));
+    assert!(rose_roots.contains(&pepper));
+
+    // Check quarantine isolation for all varieties:
+    // a. Broken mod in wooshh/skins/119000
+    let q_wooshh = crate::quarantine::resolve_quarantine_path(&wooshh_mod, Some(&root));
+    assert_eq!(q_wooshh, wooshh.join(".broken").join("119000").join("WooshDraven.fantome"));
+
+    // b. Broken mod in pepperpotts/skins22/421000
+    let q_pepper = crate::quarantine::resolve_quarantine_path(&pepper_mod, Some(&root));
+    assert_eq!(q_pepper, pepper.join(".broken").join("421000").join("RekSai.fantome"));
+
+    // c. Broken mod in normal_skins/
+    let q_normal = crate::quarantine::resolve_quarantine_path(&normal_mod, Some(&root));
+    assert_eq!(q_normal, root.join(".broken").join("normal_skins").join("CustomSkin.fantome"));
+
+    // d. Broken loose mod in root
+    let q_loose = crate::quarantine::resolve_quarantine_path(&loose1, Some(&root));
+    assert_eq!(q_loose, root.join(".broken").join("Standalone.modpkg"));
+}
+
 
 
 
