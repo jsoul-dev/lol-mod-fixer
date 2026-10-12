@@ -818,6 +818,16 @@ fn test_beautify_all_user_examples() {
     );
     assert_eq!(res23, "Chun Li Garen v2.0");
 
+    // Example 24: Parentheses around champion name
+    let res24 = compute_beautified_title(
+        "The Evoker (Yorick)",
+        None,
+        None,
+        None,
+        &[],
+    );
+    assert_eq!(res24, "The Evoker Yorick v1.0");
+
     // Idempotency: Running beautification on already-beautified titles MUST remain unchanged
     let all_beautified = [
         (&res1, "33000"),
@@ -843,6 +853,7 @@ fn test_beautify_all_user_examples() {
         (&res21, "421000"),
         (&res22, "421000"),
         (&res23, "86000"),
+        (&res24, "83000"),
     ];
     for (title, parent_id) in all_beautified {
         let idempotent = compute_beautified_title(title, Some(parent_id), None, None, &[]);
