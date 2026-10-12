@@ -141,10 +141,19 @@ pub fn execute_repair(
     if input_path.is_file() || crate::formats::is_fantome_folder(&input_path) {
         // Single file or extracted mod folder repair
         printer.print_banner(None);
-        let effective_input = if beautify && crate::formats::is_fantome_folder(&input_path) {
-            match crate::beautify::beautify_and_sync_folder(&input_path) {
-                Ok(Some(new_p)) => new_p,
-                _ => input_path.clone(),
+        let effective_input = if beautify && !dry_run {
+            if crate::formats::is_fantome_folder(&input_path) {
+                match crate::beautify::beautify_and_sync_folder(&input_path) {
+                    Ok(Some(new_p)) => new_p,
+                    _ => input_path.clone(),
+                }
+            } else if crate::formats::is_fantome_archive(&input_path) {
+                match crate::beautify::beautify_archive_file(&input_path) {
+                    Ok(Some(new_p)) => new_p,
+                    _ => input_path.clone(),
+                }
+            } else {
+                input_path.clone()
             }
         } else {
             input_path.clone()
@@ -237,10 +246,19 @@ pub fn execute_repair(
     } else {
         printer.print_scan_status(total);
         for (idx, path) in candidates.iter().enumerate() {
-            let active_path = if beautify && crate::formats::is_fantome_folder(path) {
-                match crate::beautify::beautify_and_sync_folder(path) {
-                    Ok(Some(new_p)) => new_p,
-                    _ => path.clone(),
+            let active_path = if beautify && !dry_run {
+                if crate::formats::is_fantome_folder(path) {
+                    match crate::beautify::beautify_and_sync_folder(path) {
+                        Ok(Some(new_p)) => new_p,
+                        _ => path.clone(),
+                    }
+                } else if crate::formats::is_fantome_archive(path) {
+                    match crate::beautify::beautify_archive_file(path) {
+                        Ok(Some(new_p)) => new_p,
+                        _ => path.clone(),
+                    }
+                } else {
+                    path.clone()
                 }
             } else {
                 path.clone()

@@ -510,3 +510,134 @@ pub fn beautify_and_sync_folder(mod_dir: &Path) -> FixerResult<Option<PathBuf>> 
         Ok(None)
     }
 }
+
+/// Inspect a `.fantome` or `.zip` mod archive, extract metadata, and rename the file
+/// to `<Skin Name> <Champion Name> v<Version>.<ext>` if needed.
+///
+/// Returns `Ok(Some(new_path))` if renamed, or `Ok(None)` if already up to date or unchanged.
+pub fn beautify_archive_file(archive_path: &Path) -> FixerResult<Option<PathBuf>> {
+    if !archive_path.is_file() {
+        return Ok(None);
+    }
+
+    let extension = match archive_path.extension().and_then(|s| s.to_str()) {
+        Some(ext) => {
+            let lower = ext.to_ascii_lowercase();
+            if lower != "fantome" && lower != "zip" {
+                return Ok(None);
+            }
+            ext.to_string()
+        }
+        None => return Ok(None),
+    };
+
+    let current_stem = match archive_path.file_stem().and_then(|s| s.to_str()) {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+
+    let parent_name = archive_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str());
+
+    // Inspect archive without full extraction
+    let (info_name, info_version, wad_names) = {
+        let file = match fs_err::File::open(archive_path) {
+            Ok(f) => f,
+            Err(_) => return Ok(None),
+        };
+        let mut zip = match zip::ZipArchive::new(file) {
+            Ok(z) => z,
+            Err(_) => return Ok(None),
+        };
+
+        let mut i_name = None;
+        let mut i_version = None;
+        let mut wads = Vec::new();
+
+        for i in 0..zip.len() {
+            let zip_file = match zip.by_index(i) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let entry_name = zip_file.name().to_string();
+            let lower = entry_name.to_ascii_lowercase().replace('\\', "/");
+
+            if (lower == "meta/info.json" || lower.ends_with("/meta/info.json")) && i_name.is_none() {
+                use std::io::Read;
+                let mut content = String::new();
+                let mut reader = std::io::BufReader::new(zip_file);
+                if reader.read_to_string(&mut content).is_ok() {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                        i_name = val
+                            .get("Name")
+                            .or_else(|| val.get("name"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        i_version = val
+                            .get("Version")
+                            .or_else(|| val.get("version"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                    }
+                }
+            } else if lower.starts_with("wad/")
+                || lower.contains("/wad/")
+                || lower.ends_with(".wad.client")
+            {
+                if let Some(filename) = Path::new(&entry_name).file_name().and_then(|n| n.to_str()) {
+                    wads.push(filename.to_string());
+                }
+            } else if wads.is_empty() && (lower.contains("characters/") || lower.contains("/assets/")) {
+                if let Some(filename) = Path::new(&entry_name).file_name().and_then(|n| n.to_str()) {
+                    wads.push(filename.to_string());
+                }
+            }
+        }
+
+        (i_name, i_version, wads)
+    };
+
+    let wad_refs: Vec<&str> = wad_names.iter().map(|s| s.as_str()).collect();
+
+    let beautified = compute_beautified_title(
+        current_stem,
+        parent_name,
+        info_name.as_deref(),
+        info_version.as_deref(),
+        &wad_refs,
+    );
+
+    let target_filename = format!("{beautified}.{extension}");
+    let current_filename = archive_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+
+    if current_filename == target_filename {
+        return Ok(None);
+    }
+
+    let parent_dir = match archive_path.parent() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+    let target_path = parent_dir.join(&target_filename);
+
+    if target_path.exists() && target_path != archive_path {
+        // Target file already exists; skip renaming to avoid collision
+        return Ok(None);
+    }
+
+    if let Err(e) = fs_err::rename(archive_path, &target_path) {
+        tracing::warn!(
+            "Failed to rename archive file from '{}' to '{}': {e}",
+            archive_path.display(),
+            target_path.display()
+        );
+        return Ok(None);
+    }
+
+    Ok(Some(target_path))
+}

@@ -1761,6 +1761,93 @@ fn test_lock_or_permission_error_detection_and_tracking() {
     assert_eq!(get_restricted_count(), 0);
 }
 
+#[test]
+fn test_beautify_standalone_archive_files() {
+    use std::io::Write;
+    let temp = TempDir::new().unwrap();
+
+    let archive_path = temp.path().join("The_Warden_Rek_Sai-Default.fantome");
+    let file = fs_err::File::create(&archive_path).unwrap();
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default();
+
+    zip.start_file("META/info.json", options).unwrap();
+    zip.write_all(b"{\"Name\":\"Warden RekSai\",\"Version\":\"1.4.0\"}").unwrap();
+
+    zip.start_file("WAD/RekSai.wad.client", options).unwrap();
+    zip.write_all(b"dummy-wad").unwrap();
+    zip.finish().unwrap();
+
+    assert!(archive_path.exists());
+
+    // Beautify the archive file
+    let new_path = crate::beautify::beautify_archive_file(&archive_path).unwrap();
+    assert!(new_path.is_some());
+    let beautified_path = new_path.unwrap();
+    assert_eq!(
+        beautified_path.file_name().unwrap().to_str().unwrap(),
+        "The Warden Rek'Sai v1.4.fantome"
+    );
+    assert!(!archive_path.exists(), "Old archive must be renamed");
+    assert!(beautified_path.exists(), "New beautified archive must exist on disk");
+
+    // Idempotency: calling again must return Ok(None)
+    let idempotent = crate::beautify::beautify_archive_file(&beautified_path).unwrap();
+    assert!(idempotent.is_none());
+}
+
+#[test]
+fn test_repair_scans_and_beautifies_standalone_archives() {
+    use std::io::Write;
+    let temp = TempDir::new().unwrap();
+    let test_dir = temp.path().join(".test");
+    fs_err::create_dir_all(&test_dir).unwrap();
+
+    let archive_path = test_dir.join("The_Warden_Rek_Sai-Default.fantome");
+    let file = fs_err::File::create(&archive_path).unwrap();
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default();
+
+    zip.start_file("META/info.json", options).unwrap();
+    zip.write_all(br#"{
+  "Name": "Warden RekSai",
+  "Author": "Sauronkaiser",
+  "Version": "1.4.0",
+  "Description": "Test mod"
+}"#).unwrap();
+
+    let healthy_data = ltk_manager_assets::test_util::build_packed_wad(&[(
+        "data/characters/reksai/skins/skin0.bin",
+        &ltk_manager_assets::test_util::bin_bytes(&healthy_bin()),
+    )]);
+    zip.start_file("WAD/RekSai.wad.client", options).unwrap();
+    zip.write_all(&healthy_data).unwrap();
+    zip.finish().unwrap();
+
+    let printer = crate::output::Printer::new(false, false);
+    let code = crate::engine::execute_repair(
+        Some(test_dir.clone()),
+        None,
+        None,
+        false, // backup
+        false, // dry_run
+        true,  // recursive
+        true,  // beautify
+        false, // cleanup
+        false, // mapping
+        false, // migrate
+        false, // quarantine
+        false, // delete_unrepairable
+        &printer,
+    )
+    .unwrap();
+
+    assert_eq!(code, crate::exit_codes::SUCCESS);
+    assert!(!archive_path.exists(), "Original un-beautified archive must have been renamed");
+    let expected_new = test_dir.join("The Warden Rek'Sai v1.4.fantome");
+    assert!(expected_new.exists(), "Archive must now be beautified on disk");
+}
+
 
 
 

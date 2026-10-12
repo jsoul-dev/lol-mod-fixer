@@ -123,6 +123,23 @@ pub fn is_fantome_folder(path: &Path) -> bool {
     false
 }
 
+/// Check if a path is a Fantome mod archive (.fantome file or valid mod .zip file).
+pub fn is_fantome_archive(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("fantome") => true,
+        Some("zip") => is_fantome_zip(path),
+        _ => false,
+    }
+}
+
 fn is_fantome_zip(path: &Path) -> bool {
     let Ok(file) = File::open(path) else {
         return false;
