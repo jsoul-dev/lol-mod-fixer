@@ -1889,7 +1889,32 @@ fn test_resolve_effective_scan_dir_subfolder_detection() {
     let resolved_direct = crate::migrate::resolve_effective_scan_dir(pepperpotts_skins.clone());
     assert_eq!(resolved_direct, pepperpotts_skins);
 
-    // 4. Arbitrary directory without skins subfolder returns itself
+    // 4. Renamed skins folder fallback (e.g. pepperpotts/skins22)
+    let pepperpotts2 = temp.path().join("pepperpotts2");
+    let skins22 = pepperpotts2.join("skins22");
+    let target_22 = skins22.join("119000");
+    fs_err::create_dir_all(&target_22).unwrap();
+    fs_err::write(target_22.join("rose_mod_targets.json"), b"{}").unwrap();
+
+    assert!(crate::migrate::is_rose_skins_directory(&skins22), "skins22 must be recognized as Rose skins structure");
+    let resolved_22 = crate::migrate::resolve_effective_scan_dir(pepperpotts2.clone());
+    assert_eq!(resolved_22, skins22, "Must automatically redirect pepperpotts2 to skins22 subfolder");
+
+    let resolved_skins22_direct = crate::migrate::resolve_effective_scan_dir(skins22.clone());
+    assert_eq!(resolved_skins22_direct, skins22, "Directly passing skins22 must return skins22");
+
+    // 5. Completely custom renamed folder containing Rose structure (e.g. pepperpotts3/my_custom_mods)
+    let pepperpotts3 = temp.path().join("pepperpotts3");
+    let custom_mods = pepperpotts3.join("my_custom_mods");
+    let target_custom = custom_mods.join("53000");
+    fs_err::create_dir_all(&target_custom).unwrap();
+    fs_err::write(target_custom.join("Blitzcrank.fantome"), b"dummy").unwrap();
+
+    assert!(crate::migrate::is_rose_skins_directory(&custom_mods), "my_custom_mods containing numeric ID with fantome must be recognized");
+    let resolved_custom = crate::migrate::resolve_effective_scan_dir(pepperpotts3.clone());
+    assert_eq!(resolved_custom, custom_mods, "Must redirect to my_custom_mods fallback");
+
+    // 6. Arbitrary directory without Rose subfolder returns itself
     let arbitrary = temp.path().join("arbitrary");
     fs_err::create_dir_all(&arbitrary).unwrap();
     let resolved_arb = crate::migrate::resolve_effective_scan_dir(arbitrary.clone());

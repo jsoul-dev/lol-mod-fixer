@@ -66,6 +66,10 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
         return true;
     }
 
+    if dir.join(ROSE_MOD_TARGETS).is_file() {
+        return true;
+    }
+
     let dir_name = dir
         .file_name()
         .and_then(|n| n.to_str())
@@ -79,11 +83,6 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
                 if name.chars().all(|c| c.is_ascii_digit()) && !name.is_empty() {
-                    // If the folder is named "skins" and contains numeric subdirectories, it's definitely Rose skins!
-                    if dir_name == "skins" {
-                        return true;
-                    }
-
                     // Check if numeric folder contains archives, rose manifests, or extracted mod folders
                     if let Ok(sub_entries) = fs_err::read_dir(&p) {
                         for sub in sub_entries.filter_map(|e| e.ok()) {
@@ -92,11 +91,19 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
                                 || sub_name.ends_with(".fantome")
                                 || sub_name.ends_with(".zip")
                                 || sub_name.ends_with(".modpkg")
+                                || sub_name.ends_with(".wad.client")
+                                || sub_name.ends_with(".wad")
                                 || (sub.path().is_dir() && crate::formats::is_fantome_folder(&sub.path()))
                             {
                                 return true;
                             }
                         }
+                    }
+
+                    // If the folder name contains "skin" (e.g. "skins", "skins22", "my_skins")
+                    // and has numeric subdirectories, it's also recognized as a Rose skins folder!
+                    if dir_name.contains("skin") {
+                        return true;
                     }
                 }
             }
@@ -109,26 +116,67 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
 /// Resolve the effective scan directory.
 ///
 /// If `dir` is a directory that is not itself a Rose skins root, but contains
-/// a `skins` subfolder (or `mods/skins`) that is a valid Rose structure,
-/// returns the `skins` subfolder path so the fixer seamlessly operates on the
+/// a `skins` subfolder (or `mods/skins`) or any other subfolder that is a valid
+/// Rose structure (in case the user renamed it, e.g. "skins22", "my_skins"),
+/// returns that subfolder path so the fixer seamlessly operates on the
 /// actual Rose mods root.
 pub fn resolve_effective_scan_dir(dir: PathBuf) -> PathBuf {
     if !dir.is_dir() {
         return dir;
     }
 
+    // 1. If dir itself is already a Rose skins directory, use it directly.
     if is_rose_skins_directory(&dir) {
         return dir;
     }
 
+    // 2. Check standard "skins" subfolder first
     let skins_sub = dir.join("skins");
     if skins_sub.is_dir() && is_rose_skins_directory(&skins_sub) {
         return skins_sub;
     }
 
+    // 3. Check standard "mods/skins" subfolder (e.g. run from Rose root)
     let mods_skins_sub = dir.join("mods").join("skins");
     if mods_skins_sub.is_dir() && is_rose_skins_directory(&mods_skins_sub) {
         return mods_skins_sub;
+    }
+
+    // 4. Fallback: inspect any immediate subdirectory in case the user renamed
+    // the skins folder to something else (e.g. "skins22", "my_skins", "custom_skins", etc.)
+    if let Ok(entries) = fs_err::read_dir(&dir) {
+        let mut matching_subdirs = Vec::new();
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.')
+                    || name.eq_ignore_ascii_case("backup")
+                    || name.eq_ignore_ascii_case("hematite-fixed")
+                    || name.eq_ignore_ascii_case(".broken")
+                {
+                    continue;
+                }
+                if is_rose_skins_directory(&p) {
+                    matching_subdirs.push(p);
+                }
+            }
+        }
+
+        if !matching_subdirs.is_empty() {
+            // Prioritize candidates containing "skin" in their name (e.g. "skins22") if available
+            if let Some(preferred) = matching_subdirs.iter().find(|p| {
+                let name = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                name.contains("skin")
+            }) {
+                return preferred.clone();
+            }
+            return matching_subdirs.into_iter().next().unwrap();
+        }
     }
 
     dir
