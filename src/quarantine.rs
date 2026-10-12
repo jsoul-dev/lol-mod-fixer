@@ -17,12 +17,6 @@ pub fn resolve_quarantine_path(mod_path: &Path, root_dir: Option<&Path>) -> Path
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown_mod".to_string());
 
-    if let Some(root) = root_dir {
-        if let Ok(rel) = mod_path.strip_prefix(root) {
-            return root.join(BROKEN_DIR_NAME).join(rel);
-        }
-    }
-
     // Check if the mod is inside a numeric target folder (e.g. skins/119000/mod)
     if let Some(parent) = mod_path.parent() {
         let parent_name = parent
@@ -40,6 +34,15 @@ pub fn resolve_quarantine_path(mod_path: &Path, root_dir: Option<&Path>) -> Path
                     .join(&file_name);
             }
         }
+    }
+
+    if let Some(root) = root_dir {
+        if let Ok(rel) = mod_path.strip_prefix(root) {
+            return root.join(BROKEN_DIR_NAME).join(rel);
+        }
+    }
+
+    if let Some(parent) = mod_path.parent() {
         return parent.join(BROKEN_DIR_NAME).join(&file_name);
     }
 

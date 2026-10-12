@@ -113,13 +113,148 @@ pub fn is_rose_skins_directory(dir: &Path) -> bool {
     false
 }
 
+/// Check if a directory directly contains candidate mod files (.fantome, .modpkg, etc.)
+/// or extracted mod folders.
+pub fn has_direct_mod_candidates(dir: &Path) -> bool {
+    if let Ok(entries) = fs_err::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_file() && crate::scanner::is_candidate_file(&p) {
+                return true;
+            }
+            if p.is_dir() && crate::formats::is_fantome_folder(&p) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Discover all Rose skins root directories located under `dir` (or `dir` itself).
+///
+/// This handles:
+/// - `dir` itself being a Rose skins root (e.g. `Rose\mods\skins`)
+/// - A single subfolder (e.g. `pepperpotts\skins` or `pepperpotts\skins22`)
+/// - Multiple Rose roots side-by-side (e.g. `wooshh\skins` AND `pepperpotts\skins`)
+pub fn find_rose_skins_directories(dir: &Path) -> Vec<PathBuf> {
+    let mut results = Vec::new();
+
+    if !dir.is_dir() {
+        return results;
+    }
+
+    // 1. If dir itself is already a Rose skins root, return it as the single root
+    if is_rose_skins_directory(dir) {
+        results.push(dir.to_path_buf());
+        return results;
+    }
+
+    // 2. Check direct "skins" subfolder
+    let skins_sub = dir.join("skins");
+    if skins_sub.is_dir() && is_rose_skins_directory(&skins_sub) {
+        results.push(skins_sub);
+    }
+
+    // 3. Check "mods/skins"
+    let mods_skins = dir.join("mods").join("skins");
+    if mods_skins.is_dir() && is_rose_skins_directory(&mods_skins) && !results.contains(&mods_skins) {
+        results.push(mods_skins);
+    }
+
+    // 4. Check immediate subdirectories (e.g. "skins22", "wooshh", "pepperpotts")
+    if let Ok(entries) = fs_err::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.')
+                    || name.eq_ignore_ascii_case("backup")
+                    || name.eq_ignore_ascii_case("hematite-fixed")
+                    || name.eq_ignore_ascii_case(".broken")
+                    || name.eq_ignore_ascii_case("skins")
+                    || name.eq_ignore_ascii_case("mods")
+                {
+                    continue;
+                }
+
+                // Is p itself a Rose skins directory? (e.g. "skins22", "my_skins")
+                if is_rose_skins_directory(&p) {
+                    if !results.contains(&p) {
+                        results.push(p);
+                    }
+                } else {
+                    // Check if p contains a skins subfolder (e.g. "wooshh/skins", "pepperpotts/skins")
+                    let sub_skins = p.join("skins");
+                    if sub_skins.is_dir() && is_rose_skins_directory(&sub_skins) && !results.contains(&sub_skins) {
+                        results.push(sub_skins);
+                    }
+                    let sub_mods_skins = p.join("mods").join("skins");
+                    if sub_mods_skins.is_dir() && is_rose_skins_directory(&sub_mods_skins) && !results.contains(&sub_mods_skins) {
+                        results.push(sub_mods_skins);
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
+
+/// Check if a directory contains any candidate mod files outside of a specified subfolder.
+pub fn has_mods_outside_dir(root: &Path, excluded: &Path) -> bool {
+    let entries = match fs_err::read_dir(root) {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
+
+    for entry in entries.filter_map(|e| e.ok()) {
+        let p = entry.path();
+        if p == excluded {
+            continue;
+        }
+
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.')
+            || name.eq_ignore_ascii_case("backup")
+            || name.eq_ignore_ascii_case("hematite-fixed")
+            || name.eq_ignore_ascii_case(".broken")
+        {
+            continue;
+        }
+
+        if p.is_file() {
+            if crate::scanner::is_candidate_file(&p) {
+                return true;
+            }
+        } else if p.is_dir() {
+            if crate::formats::is_fantome_folder(&p) {
+                return true;
+            }
+            // Check if this subfolder contains any mod files
+            if let Ok(candidates) = crate::scanner::scan_directory(&p, true) {
+                if !candidates.is_empty() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 /// Resolve the effective scan directory.
 ///
-/// If `dir` is a directory that is not itself a Rose skins root, but contains
-/// a `skins` subfolder (or `mods/skins`) or any other subfolder that is a valid
-/// Rose structure (in case the user renamed it, e.g. "skins22", "my_skins"),
-/// returns that subfolder path so the fixer seamlessly operates on the
-/// actual Rose mods root.
+/// If `dir` is a parent directory that:
+/// 1. Contains NO loose mod files directly in `dir` (e.g. no .modpkg directly beside the exe), AND
+/// 2. Contains exactly ONE Rose skins root in its subdirectories (e.g. `skins` or `skins22`), AND
+/// 3. Contains NO other mod files/folders outside that single Rose skins root,
+/// then it seamlessly redirects to that specific Rose skins subfolder.
+///
+/// In any other case:
+/// - `dir` contains loose mod files (e.g. a .modpkg beside the exe)
+/// - `dir` contains other non-Rose folders with mods (e.g. `normal_skins`)
+/// - `dir` contains multiple Rose structures (e.g. `wooshh/skins` AND `pepperpotts/skins`)
+/// it retains `dir` as the root so that ALL mods across the root and all subdirectories are discovered and repaired.
 pub fn resolve_effective_scan_dir(dir: PathBuf) -> PathBuf {
     if !dir.is_dir() {
         return dir;
@@ -130,55 +265,26 @@ pub fn resolve_effective_scan_dir(dir: PathBuf) -> PathBuf {
         return dir;
     }
 
-    // 2. Check standard "skins" subfolder first
-    let skins_sub = dir.join("skins");
-    if skins_sub.is_dir() && is_rose_skins_directory(&skins_sub) {
-        return skins_sub;
+    // 2. If dir contains loose mod files directly in it (e.g. a .modpkg beside the exe),
+    // do NOT redirect away from dir, because the user wants to scan and fix those loose mods!
+    if has_direct_mod_candidates(&dir) {
+        return dir;
     }
 
-    // 3. Check standard "mods/skins" subfolder (e.g. run from Rose root)
-    let mods_skins_sub = dir.join("mods").join("skins");
-    if mods_skins_sub.is_dir() && is_rose_skins_directory(&mods_skins_sub) {
-        return mods_skins_sub;
-    }
+    // 3. Find all Rose skins directories under dir
+    let rose_roots = find_rose_skins_directories(&dir);
 
-    // 4. Fallback: inspect any immediate subdirectory in case the user renamed
-    // the skins folder to something else (e.g. "skins22", "my_skins", "custom_skins", etc.)
-    if let Ok(entries) = fs_err::read_dir(&dir) {
-        let mut matching_subdirs = Vec::new();
-        for entry in entries.filter_map(|e| e.ok()) {
-            let p = entry.path();
-            if p.is_dir() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.')
-                    || name.eq_ignore_ascii_case("backup")
-                    || name.eq_ignore_ascii_case("hematite-fixed")
-                    || name.eq_ignore_ascii_case(".broken")
-                {
-                    continue;
-                }
-                if is_rose_skins_directory(&p) {
-                    matching_subdirs.push(p);
-                }
-            }
-        }
-
-        if !matching_subdirs.is_empty() {
-            // Prioritize candidates containing "skin" in their name (e.g. "skins22") if available
-            if let Some(preferred) = matching_subdirs.iter().find(|p| {
-                let name = p
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or_default()
-                    .to_ascii_lowercase();
-                name.contains("skin")
-            }) {
-                return preferred.clone();
-            }
-            return matching_subdirs.into_iter().next().unwrap();
+    // If there is exactly ONE Rose skins root under dir, check if other mods exist outside it.
+    // If NO mods exist outside it (e.g. pepperpotts containing only skins/), redirect into it.
+    // If other mods DO exist outside it (e.g. normal_skins/ with mods), retain dir so everything is fixed!
+    if rose_roots.len() == 1 {
+        let single_rose = &rose_roots[0];
+        if !has_mods_outside_dir(&dir, single_rose) {
+            return single_rose.clone();
         }
     }
 
+    // Otherwise (e.g. multiple Rose roots, or mixed folders with mods outside), retain dir.
     dir
 }
 

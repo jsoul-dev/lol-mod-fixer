@@ -1921,6 +1921,102 @@ fn test_resolve_effective_scan_dir_subfolder_detection() {
     assert_eq!(resolved_arb, arbitrary);
 }
 
+#[test]
+fn test_mixed_directory_and_multi_rose_directory_structures() {
+    let temp = TempDir::new().unwrap();
+
+    // Scenario 1: Mixed directory with loose .modpkg beside the exe, non-rose folder, and skins/
+    let mixed_root = temp.path().join("mixed_root");
+    fs_err::create_dir_all(&mixed_root).unwrap();
+    let loose_mod = mixed_root.join("LooseMod.modpkg");
+    fs_err::write(&loose_mod, b"fake modpkg").unwrap();
+
+    let non_rose = mixed_root.join("other_folder");
+    fs_err::create_dir_all(&non_rose).unwrap();
+    fs_err::write(non_rose.join("readme.txt"), b"documentation").unwrap();
+
+    let skins = mixed_root.join("skins");
+    let skin_119 = skins.join("119000");
+    fs_err::create_dir_all(&skin_119).unwrap();
+    fs_err::write(skin_119.join("rose_mod_targets.json"), b"{}").unwrap();
+    fs_err::write(skin_119.join("Draven.fantome"), b"dummy").unwrap();
+
+    // resolve_effective_scan_dir must NOT drop the loose modpkg!
+    assert!(crate::migrate::has_direct_mod_candidates(&mixed_root));
+    let resolved_mixed = crate::migrate::resolve_effective_scan_dir(mixed_root.clone());
+    assert_eq!(resolved_mixed, mixed_root, "Must retain mixed_root so loose mod is not dropped");
+
+    let rose_dirs_mixed = crate::migrate::find_rose_skins_directories(&mixed_root);
+    assert_eq!(rose_dirs_mixed.len(), 1);
+    assert_eq!(rose_dirs_mixed[0], skins);
+
+    // Scenario 2: Multi-Rose directory with wooshh\skins and pepperpotts\skins
+    let multi_root = temp.path().join("multi_root");
+    let wooshh_skins = multi_root.join("wooshh").join("skins");
+    let wooshh_119 = wooshh_skins.join("119000");
+    fs_err::create_dir_all(&wooshh_119).unwrap();
+    fs_err::write(wooshh_119.join("rose_mod_targets.json"), b"{}").unwrap();
+    fs_err::write(wooshh_119.join("DravenWoosh.fantome"), b"dummy").unwrap();
+
+    let pepper_skins = multi_root.join("pepperpotts").join("skins");
+    let pepper_421 = pepper_skins.join("421000");
+    fs_err::create_dir_all(&pepper_421).unwrap();
+    fs_err::write(pepper_421.join("rose_mod_targets.json"), b"{}").unwrap();
+    fs_err::write(pepper_421.join("RekSaiPepper.fantome"), b"dummy").unwrap();
+
+    // resolve_effective_scan_dir must retain multi_root so both folders are scanned
+    let resolved_multi = crate::migrate::resolve_effective_scan_dir(multi_root.clone());
+    assert_eq!(resolved_multi, multi_root, "Must retain multi_root when multiple Rose structures exist");
+
+    let rose_dirs_multi = crate::migrate::find_rose_skins_directories(&multi_root);
+    assert_eq!(rose_dirs_multi.len(), 2, "Must discover both Rose skins roots");
+    assert!(rose_dirs_multi.contains(&wooshh_skins));
+    assert!(rose_dirs_multi.contains(&pepper_skins));
+
+    // Scenario 3: Quarantine paths isolation
+    let broken_wooshh = wooshh_119.join("broken.fantome");
+    let quaran_wooshh = crate::quarantine::resolve_quarantine_path(&broken_wooshh, Some(&multi_root));
+    assert_eq!(
+        quaran_wooshh,
+        wooshh_skins.join(".broken").join("119000").join("broken.fantome"),
+        "Broken mod inside numeric skin target must be quarantined inside its respective Rose skins root"
+    );
+
+    let broken_loose = mixed_root.join("broken_loose.fantome");
+    let quaran_loose = crate::quarantine::resolve_quarantine_path(&broken_loose, Some(&mixed_root));
+    assert_eq!(
+        quaran_loose,
+        mixed_root.join(".broken").join("broken_loose.fantome"),
+        "Broken loose mod in root must be quarantined in root's .broken"
+    );
+
+    // Scenario 4: Folder has normal_skins (not Rose structure) AND rose_skins (Rose structure)
+    let mixed_subfolders = temp.path().join("mixed_subfolders");
+    let normal_sub = mixed_subfolders.join("normal_skins");
+    fs_err::create_dir_all(&normal_sub).unwrap();
+    fs_err::write(normal_sub.join("NormalMod.fantome"), b"normal mod").unwrap();
+
+    let rose_sub = mixed_subfolders.join("rose_skins");
+    let rose_target = rose_sub.join("119000");
+    fs_err::create_dir_all(&rose_target).unwrap();
+    fs_err::write(rose_target.join("rose_mod_targets.json"), b"{}").unwrap();
+    fs_err::write(rose_target.join("RoseMod.fantome"), b"rose mod").unwrap();
+
+    let rose_roots_sub = crate::migrate::find_rose_skins_directories(&mixed_subfolders);
+    assert_eq!(rose_roots_sub.len(), 1, "Only rose_skins is a Rose structure");
+    assert_eq!(rose_roots_sub[0], rose_sub);
+
+    assert!(crate::migrate::has_mods_outside_dir(&mixed_subfolders, &rose_sub), "normal_skins has mods outside rose_sub");
+    let resolved_sub = crate::migrate::resolve_effective_scan_dir(mixed_subfolders.clone());
+    assert_eq!(resolved_sub, mixed_subfolders, "Must retain mixed_subfolders root so normal_skins is not dropped!");
+
+    // If normal_sub is empty, then it redirects to rose_sub
+    fs_err::remove_file(normal_sub.join("NormalMod.fantome")).unwrap();
+    assert!(!crate::migrate::has_mods_outside_dir(&mixed_subfolders, &rose_sub));
+    let resolved_now_empty = crate::migrate::resolve_effective_scan_dir(mixed_subfolders.clone());
+    assert_eq!(resolved_now_empty, rose_sub, "When no mods outside rose_sub, redirect to rose_sub");
+}
+
 
 
 

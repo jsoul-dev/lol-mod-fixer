@@ -210,20 +210,45 @@ pub fn execute_repair(
 
     printer.print_banner(Some(&input_path));
 
+    // Discover all Rose skins roots under input_path (or input_path itself)
+    let rose_roots = crate::migrate::find_rose_skins_directories(&input_path);
+
     // 0. Check for and migrate outdated Rose structure (.fantome/.zip archives in numeric skin folders)
-    if migrate && !dry_run && crate::migrate::is_rose_skins_directory(&input_path) {
+    if migrate && !dry_run && !rose_roots.is_empty() {
         printer.print_stage_status("Checking Rose mod structure and manifests...");
-        match crate::migrate::migrate_outdated_rose_directory(&input_path) {
-            Ok(report) => printer.print_migration_summary(&report),
-            Err(e) => tracing::warn!("Rose legacy migration notice: {e}"),
+        for rose_dir in &rose_roots {
+            match crate::migrate::migrate_outdated_rose_directory(rose_dir) {
+                Ok(report) => {
+                    if !report.is_empty() {
+                        printer.print_migration_summary(&report);
+                    }
+                }
+                Err(e) => tracing::warn!("Rose legacy migration notice for {}: {e}", rose_dir.display()),
+            }
         }
     }
 
     // 1. Initial cleanup of empty folders and orphan target manifests
     if cleanup && !dry_run {
-        match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
-            Ok(report) => printer.print_cleanup_summary(&report),
-            Err(e) => tracing::warn!("Folder cleanup notice: {e}"),
+        for rose_dir in &rose_roots {
+            match crate::cleanup::cleanup_empty_rose_folders(rose_dir) {
+                Ok(report) => {
+                    if !report.is_empty() {
+                        printer.print_cleanup_summary(&report);
+                    }
+                }
+                Err(e) => tracing::warn!("Folder cleanup notice for {}: {e}", rose_dir.display()),
+            }
+        }
+        if !rose_roots.contains(&input_path) {
+            match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
+                Ok(report) => {
+                    if !report.is_empty() {
+                        printer.print_cleanup_summary(&report);
+                    }
+                }
+                Err(e) => tracing::warn!("Folder cleanup notice: {e}"),
+            }
         }
     }
 
@@ -314,34 +339,58 @@ pub fn execute_repair(
 
     // 2. Post-repair cleanup pass (in case any operation left empty folders)
     if cleanup && !dry_run {
-        match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
-            Ok(report) => {
-                if !report.is_empty() {
-                    printer.print_cleanup_summary(&report);
+        for rose_dir in &rose_roots {
+            match crate::cleanup::cleanup_empty_rose_folders(rose_dir) {
+                Ok(report) => {
+                    if !report.is_empty() {
+                        printer.print_cleanup_summary(&report);
+                    }
                 }
+                Err(e) => tracing::warn!("Post-repair folder cleanup notice for {}: {e}", rose_dir.display()),
             }
-            Err(e) => tracing::warn!("Post-repair folder cleanup notice: {e}"),
+        }
+        if !rose_roots.contains(&input_path) {
+            match crate::cleanup::cleanup_empty_rose_folders(&input_path) {
+                Ok(report) => {
+                    if !report.is_empty() {
+                        printer.print_cleanup_summary(&report);
+                    }
+                }
+                Err(e) => tracing::warn!("Post-repair folder cleanup notice: {e}"),
+            }
         }
     }
 
     // 2.5 Post-repair synchronization pass for Rose manifests (in case any mod was renamed, repaired, or quarantined)
-    if migrate && !dry_run && crate::migrate::is_rose_skins_directory(&input_path) {
-        match crate::migrate::sync_rose_target_manifests(&input_path) {
-            Ok(synced) => {
-                if synced > 0 {
-                    tracing::info!("Synchronized {synced} rose_mod_targets.json manifest(s)");
+    if migrate && !dry_run && !rose_roots.is_empty() {
+        for rose_dir in &rose_roots {
+            match crate::migrate::sync_rose_target_manifests(rose_dir) {
+                Ok(synced) => {
+                    if synced > 0 {
+                        tracing::info!("Synchronized {synced} rose_mod_targets.json manifest(s) in {}", rose_dir.display());
+                    }
                 }
+                Err(e) => tracing::warn!("Rose manifest synchronization notice for {}: {e}", rose_dir.display()),
             }
-            Err(e) => tracing::warn!("Rose manifest synchronization notice: {e}"),
         }
     }
 
     // 3. Generate/update skin ID mappings (skin_mappings.txt and skin_mappings.json)
     if mapping && !dry_run {
-        match crate::mapping::generate_skin_mappings(&input_path) {
-            Ok(Some(summary)) => printer.print_mapping_summary(&summary),
-            Ok(None) => {}
-            Err(e) => tracing::warn!("Skin mapping generation notice: {e}"),
+        if !rose_roots.is_empty() {
+            for rose_dir in &rose_roots {
+                match crate::mapping::generate_skin_mappings(rose_dir) {
+                    Ok(Some(summary)) => printer.print_mapping_summary(&summary),
+                    Ok(None) => {}
+                    Err(e) => tracing::warn!("Skin mapping generation notice for {}: {e}", rose_dir.display()),
+                }
+            }
+        } else {
+            match crate::mapping::generate_skin_mappings(&input_path) {
+                Ok(Some(summary)) => printer.print_mapping_summary(&summary),
+                Ok(None) => {}
+                Err(e) => tracing::warn!("Skin mapping generation notice: {e}"),
+            }
         }
     }
 
