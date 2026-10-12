@@ -36,7 +36,7 @@ impl ModFormat {
 
     /// Whether this format can be repaired by LTK Manager's repair engine.
     pub fn is_repairable_format(&self) -> bool {
-        matches!(self, Self::Fantome | Self::FantomeFolder)
+        matches!(self, Self::Fantome | Self::FantomeFolder | Self::Modpkg)
     }
 
     /// Detect format from path, directory layout, or file magic.
@@ -211,5 +211,53 @@ pub fn unpack_fantome_archive(archive_path: &Path, destination_dir: &Path) -> Fi
     archive
         .extract(destination_dir)
         .map_err(|e| FixerError::Archive(format!("Failed to extract zip archive: {e}")))?;
+    Ok(())
+}
+
+/// Convert a .modpkg binary package into a temporary or destination .fantome archive.
+pub fn convert_modpkg_to_fantome(modpkg_path: &Path, fantome_path: &Path) -> FixerResult<()> {
+    let temp_dir = tempfile::TempDir::new()?;
+    let project_dir = temp_dir.path().join("project");
+    fs_err::create_dir_all(&project_dir)?;
+
+    let project_utf8: camino::Utf8PathBuf = project_dir
+        .try_into()
+        .map_err(|_| FixerError::Archive("Project path is not valid UTF-8".to_string()))?;
+
+    let file = fs_err::File::open(modpkg_path)?;
+    ltk_mod_project::ProjectImporter::new(&project_utf8)
+        .import(ltk_mod_project::modpkg::ModpkgImporter::new(file))
+        .map_err(|e| FixerError::Archive(format!("Modpkg import failed: {e}")))?;
+
+    let output_file = fs_err::File::create(fantome_path)?;
+    ltk_mod_project::ProjectPacker::from_dir(&project_utf8)
+        .map_err(|e| FixerError::Archive(format!("Project packer failed: {e}")))?
+        .pack(ltk_mod_project::fantome::FantomeFormat::new(output_file))
+        .map_err(|e| FixerError::Archive(format!("Fantome pack failed: {e}")))?;
+
+    Ok(())
+}
+
+/// Convert a .fantome archive into a .modpkg binary package.
+pub fn convert_fantome_to_modpkg(fantome_path: &Path, modpkg_path: &Path) -> FixerResult<()> {
+    let temp_dir = tempfile::TempDir::new()?;
+    let project_dir = temp_dir.path().join("project");
+    fs_err::create_dir_all(&project_dir)?;
+
+    let project_utf8: camino::Utf8PathBuf = project_dir
+        .try_into()
+        .map_err(|_| FixerError::Archive("Project path is not valid UTF-8".to_string()))?;
+
+    let file = fs_err::File::open(fantome_path)?;
+    ltk_mod_project::ProjectImporter::new(&project_utf8)
+        .import(ltk_mod_project::fantome::FantomeImporter::new(file))
+        .map_err(|e| FixerError::Archive(format!("Fantome import failed: {e}")))?;
+
+    let output_file = fs_err::File::create(modpkg_path)?;
+    ltk_mod_project::ProjectPacker::from_dir(&project_utf8)
+        .map_err(|e| FixerError::Archive(format!("Project packer failed: {e}")))?
+        .pack(ltk_mod_project::modpkg::ModpkgFormat::new(output_file))
+        .map_err(|e| FixerError::Archive(format!("Modpkg pack failed: {e}")))?;
+
     Ok(())
 }

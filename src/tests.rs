@@ -240,26 +240,53 @@ fn test_wad_client_behavior_and_limitation() {
 }
 
 #[test]
-fn test_modpkg_behavior_and_limitation() {
+fn test_modpkg_corrupt_behavior() {
     let temp = TempDir::new().unwrap();
-    let modpkg_path = temp.path().join("Legacy.modpkg");
-    fs_err::write(&modpkg_path, b"test-modpkg").unwrap();
+    let modpkg_path = temp.path().join("Corrupt.modpkg");
+    fs_err::write(&modpkg_path, b"corrupted-invalid-bytes").unwrap();
 
     let config = dummy_config();
     let report = check_mod_health(&modpkg_path, &config).unwrap();
 
-    assert_eq!(report.status, ModHealthStatus::Unrepairable);
+    assert_eq!(report.status, ModHealthStatus::Broken);
     assert_eq!(report.format, ModFormat::Modpkg);
     assert!(
         report
             .reason
             .as_ref()
             .unwrap()
-            .contains(".modpkg is read straight out of its archive")
+            .contains("Failed to read .modpkg package")
     );
 
     let repair_result = repair_mod_archive(&modpkg_path, None, &config, false, false).unwrap();
-    assert!(repair_result.is_unrepairable());
+    assert!(repair_result.is_failed());
+}
+
+#[test]
+fn test_modpkg_healthy_detection_and_repair_unchanged() {
+    let temp = TempDir::new().unwrap();
+    let fantome_file = temp.path().join("Healthy.fantome");
+    make_packed_bin_fantome_zip(
+        &fantome_file,
+        "HealthyChamp",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+
+    let modpkg_file = temp.path().join("HealthyChamp.modpkg");
+    crate::formats::convert_fantome_to_modpkg(&fantome_file, &modpkg_file).unwrap();
+
+    assert_eq!(ModFormat::detect(&modpkg_file), ModFormat::Modpkg);
+
+    let config = dummy_config();
+    let report = check_mod_health(&modpkg_file, &config).unwrap();
+
+    assert_eq!(report.format, ModFormat::Modpkg);
+    assert_eq!(report.status, ModHealthStatus::Healthy);
+    assert_eq!(report.problem_count, 0);
+
+    let repair_result = repair_mod_archive(&modpkg_file, None, &config, false, false).unwrap();
+    assert!(repair_result.is_unchanged());
 }
 
 #[test]

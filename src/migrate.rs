@@ -16,10 +16,6 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use camino::Utf8PathBuf;
-use ltk_mod_project::fantome::FantomeFormat;
-use ltk_mod_project::modpkg::ModpkgImporter;
-use ltk_mod_project::{ProjectImporter, ProjectPacker};
 use zip::ZipArchive;
 
 use crate::error::{FixerError, FixerResult};
@@ -347,25 +343,8 @@ pub fn safe_extract_zip(archive_path: &Path, destination: &Path) -> FixerResult<
 /// binary package into the extracted Rose layout (META/info.json, WAD/, etc.).
 pub fn extract_modpkg_archive(modpkg_path: &Path, destination: &Path) -> FixerResult<()> {
     let temp_dir = tempfile::TempDir::new()?;
-    let project_dir = temp_dir.path().join("project");
-    fs_err::create_dir_all(&project_dir)?;
-
-    let project_utf8: Utf8PathBuf = project_dir
-        .try_into()
-        .map_err(|_| FixerError::Archive("Project path is not valid UTF-8".to_string()))?;
-
-    let file = fs_err::File::open(modpkg_path)?;
-    ProjectImporter::new(&project_utf8)
-        .import(ModpkgImporter::new(file))
-        .map_err(|e| FixerError::Archive(format!("Modpkg import failed: {e}")))?;
-
     let temp_fantome = temp_dir.path().join("converted.fantome");
-    let output_file = fs_err::File::create(&temp_fantome)?;
-    ProjectPacker::from_dir(&project_utf8)
-        .map_err(|e| FixerError::Archive(format!("Project packer failed: {e}")))?
-        .pack(FantomeFormat::new(output_file))
-        .map_err(|e| FixerError::Archive(format!("Fantome pack failed: {e}")))?;
-
+    crate::formats::convert_modpkg_to_fantome(modpkg_path, &temp_fantome)?;
     safe_extract_zip(&temp_fantome, destination)?;
     Ok(())
 }

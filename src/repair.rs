@@ -113,15 +113,6 @@ pub fn repair_mod_archive(
 
     if !format.is_repairable_format() {
         return match format {
-            ModFormat::Modpkg => Ok(RepairResult::Unrepairable {
-                path: input.to_path_buf(),
-                format: ModFormat::Modpkg,
-                reason: "A .modpkg is read straight out of its archive and has no unpacked form. \
-                         LTK Manager does not support modifying or repairing .modpkg archives."
-                    .to_string(),
-                quarantined: None,
-                deleted: false,
-            }),
             ModFormat::WadClient => Ok(RepairResult::Unsupported {
                 path: input.to_path_buf(),
                 format: ModFormat::WadClient,
@@ -249,6 +240,18 @@ pub fn repair_mod_archive(
             });
         }
         temp_archive
+    } else if format == ModFormat::Modpkg {
+        let temp_archive = work_path.join("source.fantome");
+        if let Err(e) = crate::formats::convert_modpkg_to_fantome(input, &temp_archive) {
+            return Ok(RepairResult::Failed {
+                path: input.to_path_buf(),
+                format,
+                error: format!("Failed to unpack .modpkg package: {e}"),
+                quarantined: None,
+                deleted: false,
+            });
+        }
+        temp_archive
     } else {
         input.to_path_buf()
     };
@@ -333,9 +336,14 @@ pub fn repair_mod_archive(
     let is_output_folder = match output {
         Some(out) => {
             let out_str = out.to_string_lossy().to_ascii_lowercase();
-            !out_str.ends_with(".fantome") && !out_str.ends_with(".zip")
+            !out_str.ends_with(".fantome") && !out_str.ends_with(".zip") && !out_str.ends_with(".modpkg")
         }
         None => format == ModFormat::FantomeFolder,
+    };
+
+    let is_output_modpkg = match output {
+        Some(out) => out.to_string_lossy().to_ascii_lowercase().ends_with(".modpkg"),
+        None => format == ModFormat::Modpkg,
     };
 
     if is_output_folder {
@@ -362,6 +370,26 @@ pub fn repair_mod_archive(
         // If this mod is inside a Rose skin directory, synchronize rose_mod_targets.json
         if let Err(e) = crate::rose::update_rose_manifest_if_present(target_dest) {
             tracing::warn!("Failed to synchronize Rose targets manifest: {e}");
+        }
+    } else if is_output_modpkg {
+        let temp_modpkg = work_path.join("repaired.modpkg");
+        if let Err(e) = crate::formats::convert_fantome_to_modpkg(&exported_file, &temp_modpkg) {
+            return Ok(RepairResult::Failed {
+                path: input.to_path_buf(),
+                format,
+                error: format!("Failed to repack repaired mod into .modpkg: {e}"),
+                quarantined: None,
+                deleted: false,
+            });
+        }
+        if let Err(e) = replace_file_safely(target_dest, &temp_modpkg, backup) {
+            return Ok(RepairResult::Failed {
+                path: input.to_path_buf(),
+                format,
+                error: format!("Failed to save repaired .modpkg: {e}"),
+                quarantined: None,
+                deleted: false,
+            });
         }
     } else if let Err(e) = replace_file_safely(target_dest, &exported_file, backup) {
         return Ok(RepairResult::Failed {
