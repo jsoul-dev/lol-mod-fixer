@@ -778,6 +778,46 @@ fn test_beautify_all_user_examples() {
     );
     assert_eq!(res19, "Mad Scientist Ziggs v1.0");
 
+    // Example 20: The_Warden_Rek_Sai-Default with version and name in info.json -> The Warden Rek'Sai v1.4
+    let res20 = compute_beautified_title(
+        "The_Warden_Rek_Sai-Default",
+        Some("421000"),
+        Some("Warden RekSai"),
+        Some("1.4.0"),
+        &[],
+    );
+    assert_eq!(res20, "The Warden Rek'Sai v1.4");
+
+    // Example 21: The_Warden_Rek_Sai-Default-1.4 folder suffix
+    let res21 = compute_beautified_title(
+        "The_Warden_Rek_Sai-Default-1.4",
+        Some("421000"),
+        None,
+        None,
+        &[],
+    );
+    assert_eq!(res21, "The Warden Rek'Sai v1.4");
+
+    // Example 22: Already named with 'Default' artifact -> strip and fix
+    let res22 = compute_beautified_title(
+        "The Warden Default Rek'Sai v1.4",
+        Some("421000"),
+        None,
+        None,
+        &[],
+    );
+    assert_eq!(res22, "The Warden Rek'Sai v1.4");
+
+    // Example 23: Base skin artifact keyword stripping
+    let res23 = compute_beautified_title(
+        "Chun_Li_Garen-Base-2.0",
+        Some("86000"),
+        None,
+        None,
+        &[],
+    );
+    assert_eq!(res23, "Chun Li Garen v2.0");
+
     // Idempotency: Running beautification on already-beautified titles MUST remain unchanged
     let all_beautified = [
         (&res1, "33000"),
@@ -799,6 +839,10 @@ fn test_beautify_all_user_examples() {
         (&res17, "64000"),
         (&res18, "96000"),
         (&res19, "115000"),
+        (&res20, "421000"),
+        (&res21, "421000"),
+        (&res22, "421000"),
+        (&res23, "86000"),
     ];
     for (title, parent_id) in all_beautified {
         let idempotent = compute_beautified_title(title, Some(parent_id), None, None, &[]);

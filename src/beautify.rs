@@ -57,18 +57,33 @@ pub fn normalize_version(raw: &str) -> String {
 /// Extract version from a folder name string if it contains a version suffix.
 /// Returns (stripped_name, Option<raw_version>).
 pub fn extract_folder_version(name: &str) -> (String, Option<String>) {
-    // Check for branch suffixes like -main, -Main, -master, -Master
-    let lower = name.to_ascii_lowercase();
-    for branch in ["-main", "_main", "-master", "_master", " main", " master"] {
-        if lower.ends_with(branch) {
-            let stripped = &name[..name.len() - branch.len()];
-            return (stripped.trim().to_string(), None);
+    let mut current = name.trim();
+
+    // Check for branch and slot suffixes like -main, -master, -default, -base
+    let slot_suffixes = [
+        "-main", "_main", "-master", "_master", " main", " master",
+        "-default", "_default", " default",
+        "-base", "_base", " base",
+    ];
+
+    loop {
+        let lower = current.to_ascii_lowercase();
+        let mut stripped = false;
+        for suffix in slot_suffixes {
+            if lower.ends_with(suffix) {
+                current = current[..current.len() - suffix.len()].trim();
+                stripped = true;
+                break;
+            }
+        }
+        if !stripped {
+            break;
         }
     }
 
     // Try splitting on delimiter ('-', '_', or ' ') from the right
-    if let Some(idx) = name.rfind(|c| c == '-' || c == '_' || c == ' ') {
-        let candidate = &name[idx + 1..];
+    if let Some(idx) = current.rfind(|c| c == '-' || c == '_' || c == ' ') {
+        let candidate = &current[idx + 1..];
         let trimmed_cand = candidate.trim_start_matches(|c| c == 'v' || c == 'V');
         // A valid version contains digits and may contain dots
         if !trimmed_cand.is_empty()
@@ -77,12 +92,12 @@ pub fn extract_folder_version(name: &str) -> (String, Option<String>) {
                 .chars()
                 .all(|c| c.is_ascii_digit() || c == '.')
         {
-            let stripped = &name[..idx];
+            let stripped = &current[..idx];
             return (stripped.trim().to_string(), Some(candidate.to_string()));
         }
     }
 
-    (name.trim().to_string(), None)
+    (current.to_string(), None)
 }
 
 /// Check if a token is a known acronym that should remain in all-caps.
@@ -219,6 +234,8 @@ pub fn clean_skin_name(raw_name: &str, champion: Option<&str>) -> String {
             || t_norm == "repath"
             || t_norm == "fixed"
             || t_norm == "mod"
+            || t_norm == "default"
+            || t_norm == "base"
         {
             continue;
         }
