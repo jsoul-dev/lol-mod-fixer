@@ -9,10 +9,12 @@ $ErrorActionPreference = "Stop"
 $title = "# LoL Mod Fixer $Tag"
 $overview = "A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, automatic name beautification, and legacy structure migration, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose](https://github.com/Alban1911/Rose) integration."
 
-# 1. Check for custom RELEASE_NOTES.md (in .github/ or root)
+# 1. Check for custom release-notes.md (in .github/ or root)
 $customNotes = ""
 $notesPath = ""
-if (Test-Path ".github/RELEASE_NOTES.md") {
+if (Test-Path ".github/release-notes.md") {
+    $notesPath = ".github/release-notes.md"
+} elseif (Test-Path ".github/RELEASE_NOTES.md") {
     $notesPath = ".github/RELEASE_NOTES.md"
 } elseif (Test-Path "RELEASE_NOTES.md") {
     $notesPath = "RELEASE_NOTES.md"
