@@ -1,10 +1,10 @@
 # LoL Mod Fixer (`lol-mod-fixer`)
 
-[![Download Latest](https://img.shields.io/badge/Download-lol--mod--fixer.exe-2ea44f?style=flat-square&logo=windows)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest/download/lol-mod-fixer.exe)
-[![Release](https://img.shields.io/github/v/release/jsoul-dev/lol-mod-fixer?style=flat-square&color=blue)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
-[![CI](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
+[![CI](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml/badge.svg)](https://github.com/jsoul-dev/lol-mod-fixer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jsoul-dev/lol-mod-fixer?style=flat-square&color=blue)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest)
+[![Download Latest](https://img.shields.io/badge/Download-lol--mod--fixer.exe-2ea44f?style=flat-square&logo=windows)](https://github.com/jsoul-dev/lol-mod-fixer/releases/latest/download/lol-mod-fixer.exe)
 
 A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, automatic name beautification, and legacy structure migration, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose](https://github.com/Alban1911/Rose) integration.
 
