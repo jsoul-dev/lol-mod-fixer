@@ -17,7 +17,7 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 - **Direct Upstream Engine Reuse**: Integrates `ltk-manager-base`, `ltk-manager-assets`, `ltk-manager-library`, `ltk-manager-problems`, and `ltk-manager-workshop` directly as first-party crate dependencies.
 - **Single Portable Executable (Zero Dependencies)**: Compiles with statically linked C runtime (`+crt-static`), meaning it runs out-of-the-box on any Windows 10/11 computer without requiring Visual C++ Redistributable, .NET, Python, or Node.js.
 - **Automatic Mod & Folder Beautification (ON by Default)**:
-  - Formats all mod and folder names into clean, client-friendly titles:
+  - Formats all mod archives (`.fantome`, `.zip`, `.modpkg`) and extracted folders into clean, client-friendly titles:
     `<Mod Skin Name> <Champion Name> v<Version>`
   - Examples:
     - `Sonic_Rammus-1.0.0` → `Sonic Rammus v1.0`
@@ -28,6 +28,8 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
     - `Ansem_Malzahar-Main` → `Ansem Malzahar v1.1.2` *(resolves true version from `info.json`)*
     - `Zacian_Hecarim-1.1.0` → `Zacian Hecarim v1.1`
     - `Shadow_The_Hedgehog__Ekko_-1.1.3` → `Shadow The Hedgehog Ekko v1.1.3`
+    - `Abyss_Cosmic_Hecari-main.modpkg` → `Abyss Cosmic Hecarim v1.0.modpkg` *(native `.modpkg` support + fuzzy champion stripping)*
+    - `Mod_v1.0.fantome.fantome` → `Mod v1.0.fantome` *(sanitizes stacked/chained extensions)*
   - Fully idempotent: already-beautified mods remain untouched.
   - Can be disabled at any time with `--no-beautify`.
 - **Automatic Empty Folder & Orphan Manifest Cleanup (ON by Default)**:

@@ -1,3 +1,17 @@
+## What's New in v0.2.5
+
+* **Native `.modpkg` Title Beautification & In-Place Renaming**:
+  - Full support for inspecting `.modpkg` packages in-memory via `ltk_modpkg::Modpkg` to extract WAD names and project metadata without disk extraction.
+  - Automatically renames and beautifies standalone `.modpkg` files into canonical `<Skin Name> <Champion Name> v<Version>.modpkg` formatting in both single-file mode and full directory scans.
+  - Corrupted or invalid `.modpkg` files safely bypass renaming to ensure accurate health checks and quarantine handling.
+
+* **Fuzzy & Prefix Champion Token Deduplication**:
+  - Implemented prefix and Levenshtein edit distance ($\le 1$) matching to recognize truncated or slightly misspelled champion names in mod titles (e.g. `Hecari` for `Hecarim`, `Nasu` for `Nasus`, `Aatro` for `Aatrox`).
+  - Automatically strips duplicate champion occurrences (e.g. `Abyss Cosmic Hecari Hecari v0.1` $\rightarrow$ `Abyss Cosmic Hecarim v0.1` and `Abyss Cosmic Hecari Hecarim v0.1` $\rightarrow$ `Abyss Cosmic Hecarim v0.1`) without duplicating champion tokens in the final title.
+
+* **Chained & Stacked Extension Sanitization**:
+  - Added recursive archive extension stripping to clean stacked or chained extensions (e.g. `Mod v1.0.fantome.fantome`, `Mod.zip.fantome`, `Mod.modpkg.modpkg`) down to a single clean archive extension.
+
 ## What's New in v0.2.4
 
 * **Native `.modpkg` Health Inspection & In-Place Repair**:
