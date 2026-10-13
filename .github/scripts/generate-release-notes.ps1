@@ -14,8 +14,29 @@ $customNotes = ""
 if (Test-Path "RELEASE_NOTES.md") {
     $raw = [System.IO.File]::ReadAllText((Resolve-Path "RELEASE_NOTES.md"), [System.Text.Encoding]::UTF8)
     if ($raw.Trim().Length -gt 0) {
-        $customNotes = ($raw -split "`r?`n" | Where-Object { $_ -notmatch '(?i)full changelog' }) -join "`n"
-        $customNotes = $customNotes.Trim()
+        $tagVer = $Tag -replace '^v', ''
+        $cleanVer = [regex]::Escape($tagVer)
+        # Split into markdown sections starting with '## '
+        $rawSections = [regex]::Split($raw, '(?m)(?=^##\s+)') | Where-Object { $_.Trim().Length -gt 0 }
+        
+        $matchedSection = $null
+        foreach ($sec in $rawSections) {
+            $firstLine = ($sec -split "`r?`n")[0]
+            if ($firstLine -match "(?i)\bv?${cleanVer}\b") {
+                $matchedSection = $sec
+                break
+            }
+        }
+        
+        # Fallback to the top section if no version-specific heading matched
+        if (-not $matchedSection -and $rawSections.Count -gt 0) {
+            $matchedSection = $rawSections[0]
+        }
+        
+        if ($matchedSection) {
+            $customNotes = ($matchedSection -split "`r?`n" | Where-Object { $_ -notmatch '(?i)full changelog' }) -join "`n"
+            $customNotes = $customNotes.Trim()
+        }
     }
 }
 
