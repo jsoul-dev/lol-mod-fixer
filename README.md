@@ -49,7 +49,12 @@ A portable, standalone native Rust CLI tool for League of Legends mod diagnosis,
 - **Embedded Offline League Champion & Skin Database**:
   - Bundles 9,303 official skin IDs from `Alban1911/LeagueSkins`.
   - Accurately identifies champions using parent folder Skin IDs (`106000` → Volibear, `33000` → Rammus), internal WAD client archives (`WAD/Ekko.wad.client`), or folder name tokens completely offline.
+- **Native `.modpkg` Health Inspection & In-Place Repair**:
+  - Direct support for inspecting standalone `.modpkg` archives headlessly using LTK's native `ModpkgImporter`.
+  - Healthy `.modpkg` files are verified and left 100% untouched (`HEALTHY / UNCHANGED`).
+  - Repairable `.modpkg` archives are unpacked to temporary staging, repaired via LTK Manager, and repacked back into valid `.modpkg` archives in-place via `ModpkgFormat`.
 - **Rose Mod Manager Integration**:
+  - **Multi-Rose & Nested Directory Auto-Discovery**: Deep recursive discovery detects all Rose installations across complex nested layouts (e.g. `wooshh/skins`, `pepperpotts/skins22`, `mods/skins`) and mixed directories with loose files, synchronizing manifests and mappings across all roots.
   - **Legacy & Raw Archive Auto-Migration (ON by Default)**: Automatically detects outdated or raw archives (`.fantome`, `.zip`, and `.modpkg`) placed directly inside numeric skin target folders without being extracted. Safely extracts archives (converting `.modpkg` binary packages via LTK project unpacking into clean Rose layout), flattens redundant wrapper folders, validates files, unlinks original archives, and builds `rose_mod_targets.json` with exact `folderHash` and `wadHashes` so mods inject properly in Rose client and Party Mode. Already updated structures are left completely untouched. (Disable with `--no-migrate`).
   - **Extracted & RAW Asset Mod Folder Support**: Directly supports standard extracted mods (`<mod_dir>/META/info.json` + `<mod_dir>/WAD/*.wad.client`) as well as loose `RAW/` or `DATA/` asset trees (frequently distributed as zip archives or texture overrides). Accurately resolves champion names and extracts versions even when pre-compiled WADs are not present.
   - **Multi-Mod Pasting & Manifest Reconciliation**: Automatically reconciles, repairs, and synchronizes `rose_mod_targets.json` when multiple mods are manually copied or merged into an existing target folder, ensuring all installed mods on that skin ID are preserved with correct hashes.
@@ -274,7 +279,7 @@ lol-mod-fixer config set-pause false
 |---|---|---|---|---|
 | **Fantome Archive** | `.fantome`, `.zip` | ✅ Yes | ✅ Yes | Full support via `ltk-manager-library` and `ltk_fantome`. Outdated BIN property types, outdated references, and audio bank IDs are detected and repaired. |
 | **Fantome Folder** | `<dir>/META/info.json`<br>`<dir>/WAD/*.wad.client`<br>*(or `<dir>/RAW/*`, `<dir>/DATA/*`)* | ✅ Yes | ✅ Yes | Direct support for extracted mods, Rose directories, and loose RAW/DATA asset mods. Inspected, repaired, and beautified in-place with atomic rollback safety, version resolution, and `rose_mod_targets.json` synchronization. |
-| **ModPkg** | `.modpkg` | ✅ Detected / Auto-Migrated | ✅ Repaired upon extraction | Standalone `.modpkg` is an immutable package in LTK Manager. However, `lol-mod-fixer`'s migration engine automatically converts raw `.modpkg` archives into clean Rose extracted layouts (`META/` + `WAD/`), repairing and hashing them in the process. |
+| **ModPkg** | `.modpkg` | ✅ Yes | ✅ Yes | Fully inspected and repaired in-place via LTK's native `ModpkgImporter` and `ModpkgFormat`. Healthy `.modpkg` archives are recognized as healthy and left untouched; repairable archives are repaired and repacked. Raw `.modpkg` files dropped directly into Rose skin directories are also automatically migrated into extracted layouts. |
 | **Client WAD** | `.wad.client`, `.wad` | ✅ Detected | ❌ Unsupported | Standalone WAD archives contain only 64-bit xxHash hashes in their table of contents. Custom author filenames cannot be recovered without mod project metadata. |
 
 ---
