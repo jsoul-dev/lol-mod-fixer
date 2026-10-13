@@ -6,7 +6,6 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$title = "# LoL Mod Fixer $Tag"
 $overview = "A portable, standalone native Rust CLI tool for League of Legends mod diagnosis, repair, automatic name beautification, and legacy structure migration, built on the official [LeagueToolkit/ltk-manager](https://github.com/LeagueToolkit/ltk-manager) engine with full [Rose](https://github.com/Alban1911/Rose) integration."
 
 # 1. Check for custom release-notes.md (in .github/ or root)
@@ -74,7 +73,6 @@ if (Test-Path ".github/release-sticky.md") {
 
 # 4. Assemble final release body
 $sections = @(
-    $title,
     $overview,
     "---",
     $customNotes,
