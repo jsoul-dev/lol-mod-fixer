@@ -187,6 +187,63 @@ pub fn resolve_folder_skin_info(id: u32) -> (Option<&'static str>, Option<&'stat
     (champ, skin, is_base)
 }
 
+/// Calculate Levenshtein edit distance between two strings.
+pub fn levenshtein(a: &str, b: &str) -> usize {
+    let a_bytes = a.as_bytes();
+    let b_bytes = b.as_bytes();
+    let mut prev = (0..=b_bytes.len()).collect::<Vec<usize>>();
+    let mut curr = vec![0; b_bytes.len() + 1];
+
+    for (i, &ca) in a_bytes.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, &cb) in b_bytes.iter().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            curr[j + 1] = (curr[j] + 1)
+                .min(prev[j + 1] + 1)
+                .min(prev[j] + cost);
+        }
+        prev.copy_from_slice(&curr);
+    }
+    prev[b_bytes.len()]
+}
+
+/// Lookup champion name by fuzzy or prefix match (case/punctuation-insensitive).
+pub fn champion_by_name_fuzzy(name: &str) -> Option<&'static str> {
+    let db = get_db();
+    let norm = normalize_champ_key(name);
+    if norm.len() < 4
+        || norm == "main"
+        || norm == "master"
+        || norm == "base"
+        || norm == "default"
+        || norm == "fixed"
+        || norm == "repath"
+    {
+        return None;
+    }
+
+    // 1. Prefix match: e.g. "hecari" -> "hecarim", "nasu" -> "nasus", "aatro" -> "aatrox"
+    for (alias, &canonical) in &db.name_to_champ {
+        if alias.len() >= 4 && (alias.starts_with(&norm) || (norm.len() >= 5 && norm.starts_with(alias))) {
+            return Some(canonical);
+        }
+    }
+
+    // 2. Edit distance <= 1 for tokens of length >= 5
+    if norm.len() >= 5 {
+        for (alias, &canonical) in &db.name_to_champ {
+            if alias.len() >= 5
+                && (alias.len() as isize - norm.len() as isize).abs() <= 1
+                && levenshtein(&norm, alias) <= 1
+            {
+                return Some(canonical);
+            }
+        }
+    }
+
+    None
+}
+
 /// Lookup champion name by raw name string (case/punctuation-insensitive).
 pub fn champion_by_name(name: &str) -> Option<&'static str> {
     let db = get_db();
@@ -220,7 +277,7 @@ pub fn champion_alias_tokens(canonical_name: &str) -> Vec<String> {
 /// Order of precedence:
 /// 1. Numeric parent directory (Skin ID, e.g. "106000" -> "Volibear").
 /// 2. Contained WAD filenames (e.g. "Garen.wad.client" -> "Garen", "rammus.en_us.wad.client" -> "Rammus").
-/// 3. Matching champion name in folder name or META/info.json name.
+/// 3. Matching champion name in folder name or META/info.json name (exact first, then fuzzy/prefix).
 pub fn detect_champion(
     parent_dir: Option<&str>,
     folder_name: &str,
@@ -243,12 +300,12 @@ pub fn detect_champion(
         let file_part = file_part.rsplit('\\').next().unwrap_or(file_part);
         let file_part = file_part.strip_prefix("base:").unwrap_or(file_part);
         let stem = file_part.split('.').next().unwrap_or(file_part);
-        if let Some(champ) = champion_by_name(stem) {
+        if let Some(champ) = champion_by_name(stem).or_else(|| champion_by_name_fuzzy(stem)) {
             return Some(champ);
         }
     }
 
-    // 3. Word tokens inside folder_name
+    // 3. Word tokens inside folder_name (exact match first)
     let tokens: Vec<&str> = folder_name
         .split(|c: char| !c.is_alphanumeric())
         .filter(|t| !t.is_empty())
@@ -259,7 +316,7 @@ pub fn detect_champion(
         }
     }
 
-    // 4. Word tokens inside info_name
+    // 4. Word tokens inside info_name (exact match first)
     if let Some(name) = info_name {
         let info_tokens: Vec<&str> = name
             .split(|c: char| !c.is_alphanumeric())
@@ -267,6 +324,26 @@ pub fn detect_champion(
             .collect();
         for token in &info_tokens {
             if let Some(champ) = champion_by_name(token) {
+                return Some(champ);
+            }
+        }
+    }
+
+    // 5. Fuzzy/prefix match inside folder_name tokens (e.g. "Hecari" -> "Hecarim", "Nasu" -> "Nasus")
+    for token in &tokens {
+        if let Some(champ) = champion_by_name_fuzzy(token) {
+            return Some(champ);
+        }
+    }
+
+    // 6. Fuzzy/prefix match inside info_name tokens
+    if let Some(name) = info_name {
+        let info_tokens: Vec<&str> = name
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|t| !t.is_empty())
+            .collect();
+        for token in &info_tokens {
+            if let Some(champ) = champion_by_name_fuzzy(token) {
                 return Some(champ);
             }
         }

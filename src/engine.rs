@@ -147,7 +147,7 @@ pub fn execute_repair(
                     Ok(Some(new_p)) => new_p,
                     _ => input_path.clone(),
                 }
-            } else if crate::formats::is_fantome_archive(&input_path) {
+            } else if crate::formats::is_beautifiable_archive(&input_path) {
                 match crate::beautify::beautify_archive_file(&input_path) {
                     Ok(Some(new_p)) => new_p,
                     _ => input_path.clone(),
@@ -277,7 +277,7 @@ pub fn execute_repair(
                         Ok(Some(new_p)) => new_p,
                         _ => path.clone(),
                     }
-                } else if crate::formats::is_fantome_archive(path) {
+                } else if crate::formats::is_beautifiable_archive(path) {
                     match crate::beautify::beautify_archive_file(path) {
                         Ok(Some(new_p)) => new_p,
                         _ => path.clone(),

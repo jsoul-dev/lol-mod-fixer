@@ -54,16 +54,36 @@ pub fn normalize_version(raw: &str) -> String {
     }
 }
 
+/// Strip any trailing archive extensions (.fantome, .zip, .modpkg) repeatedly from a file stem or name.
+pub fn strip_archive_extensions(name: &str) -> &str {
+    let mut trimmed = name.trim();
+    loop {
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.ends_with(".fantome") {
+            trimmed = trimmed[..trimmed.len() - ".fantome".len()].trim();
+        } else if lower.ends_with(".zip") {
+            trimmed = trimmed[..trimmed.len() - ".zip".len()].trim();
+        } else if lower.ends_with(".modpkg") {
+            trimmed = trimmed[..trimmed.len() - ".modpkg".len()].trim();
+        } else {
+            break;
+        }
+    }
+    trimmed
+}
+
 /// Extract version from a folder name string if it contains a version suffix.
 /// Returns (stripped_name, Option<raw_version>).
 pub fn extract_folder_version(name: &str) -> (String, Option<String>) {
-    let mut current = name.trim();
+    let cleaned = strip_archive_extensions(name);
+    let mut current = cleaned.trim();
 
     // Check for branch and slot suffixes like -main, -master, -default, -base
     let slot_suffixes = [
         "-main", "_main", "-master", "_master", " main", " master",
         "-default", "_default", " default",
         "-base", "_base", " base",
+        ".fantome", ".zip", ".modpkg",
     ];
 
     loop {
@@ -203,6 +223,55 @@ fn title_case(token: &str) -> String {
     }
 }
 
+/// Check if a token should be filtered out as matching the detected champion
+/// (exact alias, prefix, or close typo).
+pub fn is_champion_token(token_norm: &str, champion: Option<&str>, champ_aliases: &[String]) -> bool {
+    if token_norm.is_empty() {
+        return false;
+    }
+
+    // 1. Exact match against champion aliases
+    if champ_aliases.iter().any(|ca| ca == token_norm) {
+        return true;
+    }
+
+    // If champion is specified (e.g. "Hecarim")
+    if let Some(champ) = champion {
+        let norm_champ = champ
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_ascii_lowercase();
+
+        // 2. Prefix matching for length >= 4 (e.g. "hecari" for "hecarim", "nasu" for "nasus")
+        if token_norm.len() >= 4 && norm_champ.len() >= 4 {
+            if norm_champ.starts_with(token_norm) || (token_norm.len() >= 5 && token_norm.starts_with(&norm_champ)) {
+                return true;
+            }
+        }
+
+        // Also check against each alias (e.g. "hecarim", "volibear", etc.)
+        for alias in champ_aliases {
+            if token_norm.len() >= 4 && alias.len() >= 4 {
+                if alias.starts_with(token_norm) || (token_norm.len() >= 5 && token_norm.starts_with(alias)) {
+                    return true;
+                }
+            }
+        }
+
+        // 3. Edit distance <= 1 for tokens of length >= 5
+        if token_norm.len() >= 5 && norm_champ.len() >= 5 {
+            if (token_norm.len() as isize - norm_champ.len() as isize).abs() <= 1 {
+                if crate::champions::levenshtein(token_norm, &norm_champ) <= 1 {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 /// Clean and extract the Skin Name tokens, stripping out champion name, aliases, and version/branch artifacts.
 pub fn clean_skin_name(raw_name: &str, champion: Option<&str>) -> String {
     // Split on delimiters like '_', '-', whitespace, parentheses, brackets
@@ -249,8 +318,8 @@ pub fn clean_skin_name(raw_name: &str, champion: Option<&str>) -> String {
             continue;
         }
 
-        // Skip champion name and alias tokens (e.g. "kaisa", "cait", "aphe", "leesin", "dr", "mundo")
-        if champ_aliases.iter().any(|ca| ca == &t_norm) {
+        // Skip champion name and alias tokens (exact, prefix, or fuzzy, e.g. "hecari", "hecarim", "kaisa", "cait")
+        if is_champion_token(&t_norm, champion, &champ_aliases) {
             continue;
         }
 
@@ -288,11 +357,13 @@ pub fn compute_beautified_title(
     info_version: Option<&str>,
     wad_files: &[&str],
 ) -> String {
+    let clean_folder_name = strip_archive_extensions(folder_name);
+
     // 1. Detect champion
-    let champ_opt = detect_champion(parent_skin_id, folder_name, info_name, wad_files);
+    let champ_opt = detect_champion(parent_skin_id, clean_folder_name, info_name, wad_files);
 
     // 2. Extract version (prefer folder, fallback to info.json, default "1.0")
-    let (stripped_folder_name, folder_ver_opt) = extract_folder_version(folder_name);
+    let (stripped_folder_name, folder_ver_opt) = extract_folder_version(clean_folder_name);
     let raw_ver = match (folder_ver_opt.as_deref(), info_version) {
         (Some(fv), Some(iv)) => {
             let iv_clean = iv.trim().trim_start_matches(|c| c == 'v' || c == 'V');
@@ -324,7 +395,17 @@ pub fn compute_beautified_title(
         &stripped_folder_name
     };
 
-    let skin_name = clean_skin_name(skin_name_source, champ_opt);
+    let mut skin_name = clean_skin_name(skin_name_source, champ_opt);
+    if skin_name == "Custom" && !is_uuid_like(&stripped_folder_name) {
+        if let Some(info_n) = info_name {
+            if !is_uuid_like(info_n) && !info_n.trim().is_empty() {
+                let from_info = clean_skin_name(info_n, champ_opt);
+                if from_info != "Custom" {
+                    skin_name = from_info;
+                }
+            }
+        }
+    }
 
     // 4. Assemble: <Skin Name> <Champion Name> <Version>
     match champ_opt {
@@ -511,7 +592,86 @@ pub fn beautify_and_sync_folder(mod_dir: &Path) -> FixerResult<Option<PathBuf>> 
     }
 }
 
-/// Inspect a `.fantome` or `.zip` mod archive, extract metadata, and rename the file
+/// Inspect a `.fantome` or `.zip` archive without extracting.
+fn inspect_zip_archive(archive_path: &Path) -> Option<(Option<String>, Option<String>, Vec<String>)> {
+    let file = fs_err::File::open(archive_path).ok()?;
+    let mut zip = zip::ZipArchive::new(file).ok()?;
+
+    let mut i_name = None;
+    let mut i_version = None;
+    let mut wads = Vec::new();
+
+    for i in 0..zip.len() {
+        let zip_file = match zip.by_index(i) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        let entry_name = zip_file.name().to_string();
+        let lower = entry_name.to_ascii_lowercase().replace('\\', "/");
+
+        if (lower == "meta/info.json" || lower.ends_with("/meta/info.json")) && i_name.is_none() {
+            use std::io::Read;
+            let mut content = String::new();
+            let mut reader = std::io::BufReader::new(zip_file);
+            if reader.read_to_string(&mut content).is_ok() {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    i_name = val
+                        .get("Name")
+                        .or_else(|| val.get("name"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    i_version = val
+                        .get("Version")
+                        .or_else(|| val.get("version"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+        } else if lower.starts_with("wad/")
+            || lower.contains("/wad/")
+            || lower.ends_with(".wad.client")
+        {
+            if let Some(filename) = Path::new(&entry_name).file_name().and_then(|n| n.to_str()) {
+                wads.push(filename.to_string());
+            }
+        } else if wads.is_empty() && (lower.contains("characters/") || lower.contains("/assets/")) {
+            if let Some(filename) = Path::new(&entry_name).file_name().and_then(|n| n.to_str()) {
+                wads.push(filename.to_string());
+            }
+        }
+    }
+
+    Some((i_name, i_version, wads))
+}
+
+/// Inspect a `.modpkg` package header and metadata without extracting.
+fn inspect_modpkg_archive(archive_path: &Path) -> Option<(Option<String>, Option<String>, Vec<String>)> {
+    let file = fs_err::File::open(archive_path).ok()?;
+    let mut pkg = ltk_modpkg::Modpkg::mount_from_reader(file).ok()?;
+    let mut wads = Vec::new();
+    for wad_path in pkg.wads().values() {
+        if let Some(filename) = Path::new(wad_path).file_name().and_then(|n| n.to_str()) {
+            wads.push(filename.to_string());
+        }
+    }
+    let (info_name, info_version) = match pkg.load_metadata() {
+        Ok(meta) => {
+            let name = if !meta.display_name.trim().is_empty() {
+                Some(meta.display_name)
+            } else if !meta.name.trim().is_empty() {
+                Some(meta.name)
+            } else {
+                None
+            };
+            let ver = Some(meta.version.to_string());
+            (name, ver)
+        }
+        Err(_) => (None, None),
+    };
+    Some((info_name, info_version, wads))
+}
+
+/// Inspect a `.fantome`, `.zip`, or `.modpkg` mod archive, extract metadata, and rename the file
 /// to `<Skin Name> <Champion Name> v<Version>.<ext>` if needed.
 ///
 /// Returns `Ok(Some(new_path))` if renamed, or `Ok(None)` if already up to date or unchanged.
@@ -523,80 +683,36 @@ pub fn beautify_archive_file(archive_path: &Path) -> FixerResult<Option<PathBuf>
     let extension = match archive_path.extension().and_then(|s| s.to_str()) {
         Some(ext) => {
             let lower = ext.to_ascii_lowercase();
-            if lower != "fantome" && lower != "zip" {
+            if lower != "fantome" && lower != "zip" && lower != "modpkg" {
                 return Ok(None);
             }
-            ext.to_string()
+            lower
         }
         None => return Ok(None),
     };
 
-    let current_stem = match archive_path.file_stem().and_then(|s| s.to_str()) {
+    let raw_stem = match archive_path.file_stem().and_then(|s| s.to_str()) {
         Some(s) => s,
         None => return Ok(None),
     };
+    let current_stem = strip_archive_extensions(raw_stem);
 
     let parent_name = archive_path
         .parent()
         .and_then(|p| p.file_name())
         .and_then(|n| n.to_str());
 
-    // Inspect archive without full extraction
-    let (info_name, info_version, wad_names) = {
-        let file = match fs_err::File::open(archive_path) {
-            Ok(f) => f,
-            Err(_) => return Ok(None),
-        };
-        let mut zip = match zip::ZipArchive::new(file) {
-            Ok(z) => z,
-            Err(_) => return Ok(None),
-        };
-
-        let mut i_name = None;
-        let mut i_version = None;
-        let mut wads = Vec::new();
-
-        for i in 0..zip.len() {
-            let zip_file = match zip.by_index(i) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-            let entry_name = zip_file.name().to_string();
-            let lower = entry_name.to_ascii_lowercase().replace('\\', "/");
-
-            if (lower == "meta/info.json" || lower.ends_with("/meta/info.json")) && i_name.is_none() {
-                use std::io::Read;
-                let mut content = String::new();
-                let mut reader = std::io::BufReader::new(zip_file);
-                if reader.read_to_string(&mut content).is_ok() {
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                        i_name = val
-                            .get("Name")
-                            .or_else(|| val.get("name"))
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        i_version = val
-                            .get("Version")
-                            .or_else(|| val.get("version"))
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                    }
-                }
-            } else if lower.starts_with("wad/")
-                || lower.contains("/wad/")
-                || lower.ends_with(".wad.client")
-            {
-                if let Some(filename) = Path::new(&entry_name).file_name().and_then(|n| n.to_str()) {
-                    wads.push(filename.to_string());
-                }
-            } else if wads.is_empty() && (lower.contains("characters/") || lower.contains("/assets/")) {
-                if let Some(filename) = Path::new(&entry_name).file_name().and_then(|n| n.to_str()) {
-                    wads.push(filename.to_string());
-                }
-            }
+    // Inspect archive without full extraction. Return Ok(None) if the archive cannot be opened (e.g. corrupted/invalid).
+    let (info_name, info_version, wad_names) = if extension == "modpkg" {
+        match inspect_modpkg_archive(archive_path) {
+            Some(data) => data,
+            None => return Ok(None),
         }
-
-        (i_name, i_version, wads)
+    } else {
+        match inspect_zip_archive(archive_path) {
+            Some(data) => data,
+            None => return Ok(None),
+        }
     };
 
     let wad_refs: Vec<&str> = wad_names.iter().map(|s| s.as_str()).collect();
@@ -637,6 +753,17 @@ pub fn beautify_archive_file(archive_path: &Path) -> FixerResult<Option<PathBuf>
             target_path.display()
         );
         return Ok(None);
+    }
+
+    // Rebuild target manifest if in a numeric skin target directory
+    if let Some(parent) = target_path.parent() {
+        if let Some(target_id) = parent
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|s| s.parse::<u32>().ok())
+        {
+            let _ = crate::migrate::rebuild_target_manifest(parent, target_id);
+        }
     }
 
     Ok(Some(target_path))

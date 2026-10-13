@@ -855,6 +855,26 @@ fn test_beautify_all_user_examples() {
     );
     assert_eq!(res24, "The Evoker Yorick v1.0");
 
+    // Example 25: Abyss Cosmic Hecari v0.1 -> Abyss Cosmic Hecarim v0.1 (typo/prefix champion stripping)
+    let res25 = compute_beautified_title("Abyss Cosmic Hecari v0.1", None, None, None, &["Hecarim.wad.client"]);
+    assert_eq!(res25, "Abyss Cosmic Hecarim v0.1");
+
+    // Example 26: Abyss Cosmic Hecari Hecari v0.1 -> Abyss Cosmic Hecarim v0.1 (repeated typo champion)
+    let res26 = compute_beautified_title("Abyss Cosmic Hecari Hecari v0.1", None, None, None, &["Hecarim.wad.client"]);
+    assert_eq!(res26, "Abyss Cosmic Hecarim v0.1");
+
+    // Example 27: Abyss Cosmic Hecari Hecarim v0.1 -> Abyss Cosmic Hecarim v0.1 (typo + full champion)
+    let res27 = compute_beautified_title("Abyss Cosmic Hecari Hecarim v0.1", None, None, None, &["Hecarim.wad.client"]);
+    assert_eq!(res27, "Abyss Cosmic Hecarim v0.1");
+
+    // Example 28: Chained extension in folder/stem: Abyss Cosmic Hecari Hecarim v0.1.fantome -> Abyss Cosmic Hecarim v0.1
+    let res28 = compute_beautified_title("Abyss Cosmic Hecari Hecarim v0.1.fantome", None, None, None, &["Hecarim.wad.client"]);
+    assert_eq!(res28, "Abyss Cosmic Hecarim v0.1");
+
+    // Example 29: Escanor Nasu (Nasu prefix for Nasus) -> Escanor Nasus v1.0
+    let res29 = compute_beautified_title("Escanor Nasu", None, None, None, &[]);
+    assert_eq!(res29, "Escanor Nasus v1.0");
+
     // Idempotency: Running beautification on already-beautified titles MUST remain unchanged
     let all_beautified = [
         (&res1, "33000"),
@@ -881,6 +901,11 @@ fn test_beautify_all_user_examples() {
         (&res22, "421000"),
         (&res23, "86000"),
         (&res24, "83000"),
+        (&res25, "120000"),
+        (&res26, "120000"),
+        (&res27, "120000"),
+        (&res28, "120000"),
+        (&res29, "75000"),
     ];
     for (title, parent_id) in all_beautified {
         let idempotent = compute_beautified_title(title, Some(parent_id), None, None, &[]);
@@ -1832,6 +1857,51 @@ fn test_beautify_standalone_archive_files() {
     // Idempotency: calling again must return Ok(None)
     let idempotent = crate::beautify::beautify_archive_file(&beautified_path).unwrap();
     assert!(idempotent.is_none());
+
+    // Test 2: Chained extension file (e.g. Abyss Cosmic Hecari Hecarim v0.1.fantome.fantome)
+    let chained_path = temp.path().join("Abyss Cosmic Hecari Hecarim v0.1.fantome.fantome");
+    let file2 = fs_err::File::create(&chained_path).unwrap();
+    let mut zip2 = zip::ZipWriter::new(file2);
+    zip2.start_file("WAD/Hecarim.wad.client", options).unwrap();
+    zip2.write_all(b"dummy-hecarim-wad").unwrap();
+    zip2.finish().unwrap();
+
+    let chained_res = crate::beautify::beautify_archive_file(&chained_path).unwrap();
+    assert!(chained_res.is_some());
+    let chained_beautified = chained_res.unwrap();
+    assert_eq!(
+        chained_beautified.file_name().unwrap().to_str().unwrap(),
+        "Abyss Cosmic Hecarim v0.1.fantome"
+    );
+    assert!(!chained_path.exists());
+    assert!(chained_beautified.exists());
+
+    // Test 3: .modpkg file beautification
+    let modpkg_source_fantome = temp.path().join("Source.fantome");
+    make_packed_bin_fantome_zip(
+        &modpkg_source_fantome,
+        "Blood Vessel Hecarim",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+
+    let uncleaned_modpkg = temp.path().join("Blood_Vessel_Aatro-main.modpkg");
+    crate::formats::convert_fantome_to_modpkg(&modpkg_source_fantome, &uncleaned_modpkg).unwrap();
+    assert!(uncleaned_modpkg.exists());
+
+    let modpkg_res = crate::beautify::beautify_archive_file(&uncleaned_modpkg).unwrap();
+    assert!(modpkg_res.is_some());
+    let modpkg_beautified = modpkg_res.unwrap();
+    assert_eq!(
+        modpkg_beautified.file_name().unwrap().to_str().unwrap(),
+        "Blood Vessel Aatrox v1.0.modpkg"
+    );
+    assert!(!uncleaned_modpkg.exists());
+    assert!(modpkg_beautified.exists());
+
+    // Idempotency on .modpkg
+    let modpkg_idempotent = crate::beautify::beautify_archive_file(&modpkg_beautified).unwrap();
+    assert!(modpkg_idempotent.is_none());
 }
 
 #[test]
@@ -1862,6 +1932,17 @@ fn test_repair_scans_and_beautifies_standalone_archives() {
     zip.write_all(&healthy_data).unwrap();
     zip.finish().unwrap();
 
+    // Also include a standalone .modpkg in the directory
+    let temp_fantome = temp.path().join("TempAatrox.fantome");
+    make_packed_bin_fantome_zip(
+        &temp_fantome,
+        "Blood Vessel Aatrox",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+    let modpkg_path = test_dir.join("Blood_Vessel_Aatro-main.modpkg");
+    crate::formats::convert_fantome_to_modpkg(&temp_fantome, &modpkg_path).unwrap();
+
     let printer = crate::output::Printer::new(false, false);
     let code = crate::engine::execute_repair(
         Some(test_dir.clone()),
@@ -1884,6 +1965,10 @@ fn test_repair_scans_and_beautifies_standalone_archives() {
     assert!(!archive_path.exists(), "Original un-beautified archive must have been renamed");
     let expected_new = test_dir.join("The Warden Rek'Sai v1.4.fantome");
     assert!(expected_new.exists(), "Archive must now be beautified on disk");
+
+    assert!(!modpkg_path.exists(), "Original un-beautified .modpkg must have been renamed");
+    let expected_modpkg = test_dir.join("Blood Vessel Aatrox v1.0.modpkg");
+    assert!(expected_modpkg.exists(), ".modpkg must now be beautified on disk");
 }
 
 #[test]

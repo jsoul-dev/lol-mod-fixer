@@ -124,6 +124,7 @@ pub fn is_fantome_folder(path: &Path) -> bool {
 }
 
 /// Check if a path is a Fantome mod archive (.fantome file or valid mod .zip file).
+#[allow(dead_code)]
 pub fn is_fantome_archive(path: &Path) -> bool {
     if !path.is_file() {
         return false;
@@ -138,6 +139,21 @@ pub fn is_fantome_archive(path: &Path) -> bool {
         Some("zip") => is_fantome_zip(path),
         _ => false,
     }
+}
+
+/// Check if a path is a beautifiable mod archive (.fantome, .zip, or .modpkg, including chained extensions).
+pub fn is_beautifiable_archive(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    let lower = path.to_string_lossy().to_ascii_lowercase();
+    if lower.ends_with(".fantome") || lower.ends_with(".modpkg") {
+        return true;
+    }
+    if lower.ends_with(".zip") {
+        return is_fantome_zip(path);
+    }
+    false
 }
 
 fn is_fantome_zip(path: &Path) -> bool {
