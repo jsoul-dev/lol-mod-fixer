@@ -1,3 +1,11 @@
+## What's New in v0.2.7
+
+* **Rose Category Manifest Precision & Stray Manifest Pruning**:
+  - Fixed category manifest scanner to register all mod subfolders regardless of individual sub-file ACL restrictions, accurately registering all map mods (`Hell Rift`, `Shurima Rift`, `Spirit Blossom Rift`, `Winter Rift`).
+  - Completely prevents generating empty `rose_category_mods.json` manifests in empty category folders (e.g. `fonts`, `announcers`, `loading_screen`, `ui`).
+  - Automatically detects and prunes any stray or empty `rose_category_mods.json` files from unpopulated category directories.
+  - Consolidated startup migration output into a single unified summary.
+
 ## What's New in v0.2.6
 
 * **Rose Category Mods Support & Simultaneous Synchronization**:
