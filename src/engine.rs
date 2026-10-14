@@ -210,11 +210,12 @@ pub fn execute_repair(
 
     printer.print_banner(Some(&input_path));
 
-    // Discover all Rose skins roots under input_path (or input_path itself)
+    // Discover all Rose skins roots and category directories under input_path (or input_path itself)
     let rose_roots = crate::migrate::find_rose_skins_directories(&input_path);
+    let category_roots = crate::rose::find_rose_category_directories(&input_path);
 
-    // 0. Check for and migrate outdated Rose structure (.fantome/.zip archives in numeric skin folders)
-    if migrate && !dry_run && !rose_roots.is_empty() {
+    // 0. Check for and migrate outdated Rose structure (.fantome/.zip archives in numeric skin folders or category folders)
+    if migrate && !dry_run && (!rose_roots.is_empty() || !category_roots.is_empty()) {
         printer.print_stage_status("Checking Rose mod structure and manifests...");
         for rose_dir in &rose_roots {
             match crate::migrate::migrate_outdated_rose_directory(rose_dir) {
@@ -224,6 +225,16 @@ pub fn execute_repair(
                     }
                 }
                 Err(e) => tracing::warn!("Rose legacy migration notice for {}: {e}", rose_dir.display()),
+            }
+        }
+        for cat_dir in &category_roots {
+            match crate::migrate::migrate_outdated_rose_category_directory(cat_dir) {
+                Ok(report) => {
+                    if !report.is_empty() {
+                        printer.print_migration_summary(&report);
+                    }
+                }
+                Err(e) => tracing::warn!("Rose category migration notice for {}: {e}", cat_dir.display()),
             }
         }
     }
@@ -305,7 +316,7 @@ pub fn execute_repair(
                             };
                             if was_deleted {
                                 *deleted = true;
-                                // Rebuild target manifest if in a numeric skin target directory
+                                // Rebuild target manifest if in a numeric skin target directory or category
                                 if let Some(parent) = path.parent() {
                                     if let Some(target_id) = parent
                                         .file_name()
@@ -313,6 +324,8 @@ pub fn execute_repair(
                                         .and_then(|s| s.parse::<u32>().ok())
                                     {
                                         let _ = crate::migrate::rebuild_target_manifest(parent, target_id);
+                                    } else if crate::rose::is_rose_category_dir(parent) {
+                                        let _ = crate::rose::rebuild_rose_category_manifest(parent);
                                     }
                                 }
                             }
@@ -362,15 +375,28 @@ pub fn execute_repair(
     }
 
     // 2.5 Post-repair synchronization pass for Rose manifests (in case any mod was renamed, repaired, or quarantined)
-    if migrate && !dry_run && !rose_roots.is_empty() {
-        for rose_dir in &rose_roots {
-            match crate::migrate::sync_rose_target_manifests(rose_dir) {
-                Ok(synced) => {
-                    if synced > 0 {
-                        tracing::info!("Synchronized {synced} rose_mod_targets.json manifest(s) in {}", rose_dir.display());
+    if migrate && !dry_run {
+        if !rose_roots.is_empty() {
+            for rose_dir in &rose_roots {
+                match crate::migrate::sync_rose_target_manifests(rose_dir) {
+                    Ok(synced) => {
+                        if synced > 0 {
+                            tracing::info!("Synchronized {synced} rose_mod_targets.json manifest(s) in {}", rose_dir.display());
+                        }
                     }
+                    Err(e) => tracing::warn!("Rose manifest synchronization notice for {}: {e}", rose_dir.display()),
                 }
-                Err(e) => tracing::warn!("Rose manifest synchronization notice for {}: {e}", rose_dir.display()),
+            }
+        }
+        if !category_roots.is_empty() {
+            for cat_dir in &category_roots {
+                match crate::rose::rebuild_rose_category_manifest(cat_dir) {
+                    Ok(true) => {
+                        tracing::info!("Synchronized rose_category_mods.json in {}", cat_dir.display());
+                    }
+                    Ok(false) => {}
+                    Err(e) => tracing::warn!("Rose category manifest synchronization notice for {}: {e}", cat_dir.display()),
+                }
             }
         }
     }

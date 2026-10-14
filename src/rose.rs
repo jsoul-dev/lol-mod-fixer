@@ -12,6 +12,22 @@ use crate::error::{FixerError, FixerResult};
 
 const TARGET_METADATA: &str = "rose_mod_targets.json";
 const LEGACY_TARGET_METADATA: &str = "rose_wad_targets.json";
+pub const ROSE_CATEGORY_MODS: &str = "rose_category_mods.json";
+
+/// Known standard non-skin Rose categories under `Rose/mods`
+pub const KNOWN_ROSE_CATEGORIES: &[&str] = &[
+    "announcers",
+    "fonts",
+    "loading_screen",
+    "maps",
+    "others",
+    "sfx",
+    "ui",
+    "vfx",
+    "voiceover",
+    "hud",
+    "audio",
+];
 
 /// Compute Rose's exact rename-stable folder hash and hashes for contained WADs.
 ///
@@ -279,4 +295,197 @@ pub fn update_rose_manifest_if_present(mod_dir: &Path) -> FixerResult<bool> {
     );
 
     Ok(true)
+}
+
+/// Check if a directory is a Rose category directory (e.g. `Rose/mods/maps`, `Rose/mods/others`).
+pub fn is_rose_category_dir(dir: &Path) -> bool {
+    if !dir.is_dir() {
+        return false;
+    }
+
+    if dir.join(ROSE_CATEGORY_MODS).is_file() {
+        return true;
+    }
+
+    let dir_name = match dir.file_name().and_then(|n| n.to_str()) {
+        Some(n) => n.to_ascii_lowercase(),
+        None => return false,
+    };
+
+    if dir_name == "skins" || dir_name.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    let path_str = dir.to_string_lossy().to_ascii_lowercase();
+    let is_in_rose_mods = path_str.contains("rose\\mods") || path_str.contains("rose/mods");
+
+    if is_in_rose_mods && KNOWN_ROSE_CATEGORIES.iter().any(|&c| c == dir_name) {
+        return true;
+    }
+
+    // If dir is under a directory named "mods" and contains extracted mod folders
+    if let Some(parent) = dir.parent() {
+        let parent_name = parent
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if parent_name == "mods" {
+            if let Ok(entries) = fs_err::read_dir(dir) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let p = entry.path();
+                    if p.is_dir()
+                        && (crate::migrate::validate_mod_folder(&p)
+                            || crate::migrate::looks_like_mod_folder(&p))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Recursively discover all Rose category directories under `base_dir` (or `base_dir` itself).
+pub fn find_rose_category_directories(base_dir: &Path) -> Vec<PathBuf> {
+    if !base_dir.is_dir() {
+        return Vec::new();
+    }
+
+    if is_rose_category_dir(base_dir) {
+        return vec![base_dir.to_path_buf()];
+    }
+
+    let mut found = Vec::new();
+
+    // Check direct children first (e.g. if base_dir is `Rose/mods`)
+    if let Ok(entries) = fs_err::read_dir(base_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_dir() && is_rose_category_dir(&p) {
+                found.push(p);
+            }
+        }
+    }
+
+    // Also search subdirectories up to depth 4
+    for entry in walkdir::WalkDir::new(base_dir)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let p = entry.into_path();
+        if p.is_dir() && is_rose_category_dir(&p) && !found.contains(&p) {
+            found.push(p);
+        }
+    }
+
+    found.sort();
+    found
+}
+
+/// Rebuild or synchronize `rose_category_mods.json` for a Rose category directory (e.g. `maps`, `others`).
+pub fn rebuild_rose_category_manifest(category_dir: &Path) -> FixerResult<bool> {
+    if !category_dir.is_dir() {
+        return Ok(false);
+    }
+
+    let manifest_path = category_dir.join(ROSE_CATEGORY_MODS);
+    let category_name = category_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("others")
+        .to_string();
+
+    // Collect valid mod subdirectories
+    let mut mod_folders = Vec::new();
+    if let Ok(entries) = fs_err::read_dir(category_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') || name.eq_ignore_ascii_case("hematite-fixed") {
+                    continue;
+                }
+                if crate::migrate::validate_mod_folder(&p) || crate::migrate::looks_like_mod_folder(&p) {
+                    mod_folders.push(name);
+                }
+            }
+        }
+    }
+
+    mod_folders.sort();
+
+    // Read existing manifest if present
+    let existing_raw = if manifest_path.is_file() {
+        fs_err::read_to_string(&manifest_path).ok()
+    } else {
+        None
+    };
+
+    let existing_json: Option<serde_json::Value> = existing_raw
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok());
+
+    let version = existing_json
+        .as_ref()
+        .and_then(|j| j.get("version"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as u32;
+
+    let cat = existing_json
+        .as_ref()
+        .and_then(|j| j.get("category"))
+        .and_then(|c| c.as_str())
+        .unwrap_or(&category_name)
+        .to_string();
+
+    let mut mods_map: std::collections::BTreeMap<String, serde_json::Value> = std::collections::BTreeMap::new();
+    for name in &mod_folders {
+        mods_map.insert(
+            name.clone(),
+            serde_json::json!({
+                "name": name,
+                "path": name
+            }),
+        );
+    }
+
+    let manifest_data = serde_json::json!({
+        "version": version,
+        "category": cat,
+        "mods": mods_map
+    });
+
+    // Check if identical to existing
+    if let Some(existing) = &existing_json {
+        if existing == &manifest_data {
+            return Ok(false);
+        }
+    }
+
+    let tmp_path = category_dir.join(format!(".{}.tmp", ROSE_CATEGORY_MODS));
+    let content = serde_json::to_string_pretty(&manifest_data)?;
+    fs_err::write(&tmp_path, content)?;
+    fs_err::rename(&tmp_path, &manifest_path)?;
+
+    tracing::info!(
+        "Synchronized Rose category manifest at {} with {} mod(s)",
+        manifest_path.display(),
+        mods_map.len()
+    );
+
+    Ok(true)
+}
+
+/// Update Rose category manifest if a mod directory resides within a Rose category.
+pub fn update_rose_category_manifest_if_present(mod_dir: &Path) -> FixerResult<bool> {
+    if let Some(parent) = mod_dir.parent() {
+        if is_rose_category_dir(parent) {
+            return rebuild_rose_category_manifest(parent);
+        }
+    }
+    Ok(false)
 }

@@ -106,7 +106,7 @@ pub fn quarantine_mod(mod_path: &Path, root_dir: Option<&Path>) -> FixerResult<P
         }
     }
 
-    // Rebuild or update Rose target manifest if inside a numeric skin target directory
+    // Rebuild or update Rose target manifest if inside a numeric skin target directory or Rose category
     if let Some(parent) = mod_path.parent() {
         if let Some(target_id) = parent
             .file_name()
@@ -114,6 +114,8 @@ pub fn quarantine_mod(mod_path: &Path, root_dir: Option<&Path>) -> FixerResult<P
             .and_then(|s| s.parse::<u32>().ok())
         {
             let _ = crate::migrate::rebuild_target_manifest(parent, target_id);
+        } else if crate::rose::is_rose_category_dir(parent) {
+            let _ = crate::rose::rebuild_rose_category_manifest(parent);
         }
     }
 

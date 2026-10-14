@@ -49,6 +49,14 @@ impl MigrationReport {
     pub fn failed_count(&self) -> usize {
         self.failed_archives.len()
     }
+
+    pub fn combine(&mut self, other: &MigrationReport) {
+        self.scanned_targets += other.scanned_targets;
+        self.extracted_archives += other.extracted_archives;
+        self.manifests_rebuilt += other.manifests_rebuilt;
+        self.skipped_archives += other.skipped_archives;
+        self.failed_archives.extend(other.failed_archives.clone());
+    }
 }
 
 /// Check if a directory is a Rose skins root or contains numeric skin target folders.
@@ -266,14 +274,20 @@ pub fn resolve_effective_scan_dir(dir: PathBuf) -> PathBuf {
         return dir;
     }
 
-    // 1. If dir itself is already a Rose skins directory, use it directly.
-    if is_rose_skins_directory(&dir) {
+    // 1. If dir itself is already a Rose skins or category directory, use it directly.
+    if is_rose_skins_directory(&dir) || crate::rose::is_rose_category_dir(&dir) {
         return dir;
     }
 
     // 2. If dir contains loose mod files directly in it (e.g. a .modpkg beside the exe),
     // do NOT redirect away from dir, because the user wants to scan and fix those loose mods!
     if has_direct_mod_candidates(&dir) {
+        return dir;
+    }
+
+    // If dir contains Rose category directories (e.g. Rose/mods), retain dir
+    // so both skins and categories (maps, others, etc.) are processed simultaneously.
+    if !crate::rose::find_rose_category_directories(&dir).is_empty() {
         return dir;
     }
 
@@ -800,4 +814,119 @@ pub fn sync_rose_target_manifests(base_dir: &Path) -> FixerResult<usize> {
     }
 
     Ok(updated)
+}
+
+/// Migrate outdated Rose category directory structure:
+/// Extracts raw `.fantome`, `.zip`, and `.modpkg` archives directly in category folders
+/// (e.g. `Rose/mods/maps`, `Rose/mods/others`) into proper modern Rose extracted mod folders
+/// and builds/updates `rose_category_mods.json`.
+///
+/// SAFE: Already extracted mod folders are left 100% untouched.
+pub fn migrate_outdated_rose_category_directory(category_dir: &Path) -> FixerResult<MigrationReport> {
+    let mut report = MigrationReport::default();
+
+    if !category_dir.is_dir() {
+        return Ok(report);
+    }
+
+    report.scanned_targets += 1;
+
+    // Find raw archives (.fantome, .zip, and .modpkg) directly in category_dir
+    let mut archives: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = fs_err::read_dir(category_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if p.is_file() {
+                let lower = p
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_ascii_lowercase();
+                if lower.ends_with(".fantome")
+                    || lower.ends_with(".zip")
+                    || lower.ends_with(".modpkg")
+                {
+                    archives.push(p);
+                }
+            }
+        }
+    }
+
+    for archive in archives {
+        let stem = match archive.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        let destination = category_dir.join(stem);
+
+        // If folder already exists and is valid, skip extraction and remove redundant archive
+        if destination.exists() {
+            if validate_mod_folder(&destination) {
+                tracing::debug!(
+                    "Category mod folder already extracted: {}\\{}",
+                    category_dir.file_name().unwrap_or_default().to_string_lossy(),
+                    stem
+                );
+                let _ = fs_err::remove_file(&archive);
+                report.skipped_archives += 1;
+                continue;
+            } else {
+                let _ = fs_err::remove_dir_all(&destination);
+            }
+        }
+
+        // Extract archive into destination
+        match safe_extract_archive(&archive, &destination) {
+            Ok(()) => {
+                let _ = flatten_single_root_folder(&destination);
+
+                if validate_mod_folder(&destination) {
+                    let _ = fs_err::remove_file(&archive);
+                    tracing::info!(
+                        "Migrated category mod: {}\\{} -> {}",
+                        category_dir.file_name().unwrap_or_default().to_string_lossy(),
+                        archive.file_name().unwrap_or_default().to_string_lossy(),
+                        stem
+                    );
+                    report.extracted_archives += 1;
+                } else {
+                    let _ = fs_err::remove_dir_all(&destination);
+                    let file_name = archive
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    report.failed_archives.push((
+                        file_name,
+                        "Extraction produced no usable mod files".to_string(),
+                    ));
+                }
+            }
+            Err(e) => {
+                let _ = fs_err::remove_dir_all(&destination);
+                let err_str = e.to_string();
+                let clean_err = if err_str.contains("Invalid checksum") {
+                    "Corrupted archive (Invalid checksum)".to_string()
+                } else {
+                    err_str
+                };
+                let file_name = archive
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+                report.failed_archives.push((file_name, clean_err));
+            }
+        }
+    }
+
+    // Rebuild or synchronize rose_category_mods.json with mod folders currently on disk
+    if let Ok(rebuilt) = crate::rose::rebuild_rose_category_manifest(category_dir) {
+        if rebuilt {
+            report.manifests_rebuilt += 1;
+        }
+    }
+
+    Ok(report)
 }

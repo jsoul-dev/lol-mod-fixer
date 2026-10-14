@@ -669,7 +669,7 @@ impl Printer {
         }
         if report.manifests_rebuilt > 0 {
             println!(
-                "  {} Built/synchronized {} rose_mod_targets.json manifest(s)",
+                "  {} Built/synchronized {} Rose manifest(s)",
                 "[OK]".green().bold(),
                 report.manifests_rebuilt.to_string().cyan().bold()
             );

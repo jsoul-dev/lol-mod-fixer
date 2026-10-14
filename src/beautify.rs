@@ -584,6 +584,7 @@ pub fn beautify_and_sync_folder(mod_dir: &Path) -> FixerResult<Option<PathBuf>> 
 
     // Always re-synchronize Rose manifest with new path & folder hashes
     let _ = update_rose_manifest_if_present(&active_path);
+    let _ = crate::rose::update_rose_category_manifest_if_present(&active_path);
 
     if needs_rename {
         Ok(Some(active_path))
@@ -755,7 +756,7 @@ pub fn beautify_archive_file(archive_path: &Path) -> FixerResult<Option<PathBuf>
         return Ok(None);
     }
 
-    // Rebuild target manifest if in a numeric skin target directory
+    // Rebuild target manifest if in a numeric skin target directory or Rose category
     if let Some(parent) = target_path.parent() {
         if let Some(target_id) = parent
             .file_name()
@@ -763,6 +764,8 @@ pub fn beautify_archive_file(archive_path: &Path) -> FixerResult<Option<PathBuf>
             .and_then(|s| s.parse::<u32>().ok())
         {
             let _ = crate::migrate::rebuild_target_manifest(parent, target_id);
+        } else if crate::rose::is_rose_category_dir(parent) {
+            let _ = crate::rose::rebuild_rose_category_manifest(parent);
         }
     }
 

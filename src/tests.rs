@@ -2205,6 +2205,190 @@ fn test_combined_all_edge_cases_scenario() {
     assert_eq!(q_loose, root.join(".broken").join("Standalone.modpkg"));
 }
 
+#[test]
+fn test_rose_category_detection_and_discovery() {
+    let temp = TempDir::new().unwrap();
+    let rose_mods = temp.path().join("Rose").join("mods");
+    fs_err::create_dir_all(&rose_mods).unwrap();
+
+    let maps_dir = rose_mods.join("maps");
+    fs_err::create_dir_all(&maps_dir).unwrap();
+
+    let loading_dir = rose_mods.join("loading_screen");
+    fs_err::create_dir_all(&loading_dir).unwrap();
+
+    let skins_dir = rose_mods.join("skins");
+    fs_err::create_dir_all(&skins_dir).unwrap();
+
+    let numeric_target = skins_dir.join("24000");
+    fs_err::create_dir_all(&numeric_target).unwrap();
+
+    // 1. Detection
+    assert!(crate::rose::is_rose_category_dir(&maps_dir));
+    assert!(crate::rose::is_rose_category_dir(&loading_dir));
+    assert!(!crate::rose::is_rose_category_dir(&skins_dir));
+    assert!(!crate::rose::is_rose_category_dir(&numeric_target));
+
+    // Custom category with rose_category_mods.json
+    let custom_cat = rose_mods.join("custom_announcer");
+    fs_err::create_dir_all(&custom_cat).unwrap();
+    fs_err::write(custom_cat.join("rose_category_mods.json"), b"{}").unwrap();
+    assert!(crate::rose::is_rose_category_dir(&custom_cat));
+
+    // 2. Discovery
+    let discovered = crate::rose::find_rose_category_directories(&rose_mods);
+    assert_eq!(discovered.len(), 3);
+    assert!(discovered.contains(&maps_dir));
+    assert!(discovered.contains(&loading_dir));
+    assert!(discovered.contains(&custom_cat));
+}
+
+#[test]
+fn test_rose_category_manifest_rebuild_and_sync() {
+    let temp = TempDir::new().unwrap();
+    let maps_dir = temp.path().join("maps");
+    fs_err::create_dir_all(&maps_dir).unwrap();
+
+    // Create two extracted mod folders in maps
+    let winter_rift = maps_dir.join("Winter Rift v1.0");
+    fs_err::create_dir_all(winter_rift.join("META")).unwrap();
+    fs_err::write(winter_rift.join("META").join("info.json"), r#"{"Name":"Winter Rift v1.0"}"#).unwrap();
+    fs_err::create_dir_all(winter_rift.join("WAD")).unwrap();
+    fs_err::write(winter_rift.join("WAD").join("Map11.wad.client"), b"wad").unwrap();
+
+    let hell_rift = maps_dir.join("Hell Rift v1.0");
+    fs_err::create_dir_all(hell_rift.join("META")).unwrap();
+    fs_err::write(hell_rift.join("META").join("info.json"), r#"{"Name":"Hell Rift v1.0"}"#).unwrap();
+
+    // Initial manifest rebuild
+    let changed = crate::rose::rebuild_rose_category_manifest(&maps_dir).unwrap();
+    assert!(changed, "Manifest should be created");
+
+    let manifest_file = maps_dir.join("rose_category_mods.json");
+    assert!(manifest_file.is_file());
+
+    let content: serde_json::Value = serde_json::from_str(&fs_err::read_to_string(&manifest_file).unwrap()).unwrap();
+    assert_eq!(content["version"], 1);
+    assert_eq!(content["category"], "maps");
+    assert_eq!(content["mods"]["Hell Rift v1.0"]["name"], "Hell Rift v1.0");
+    assert_eq!(content["mods"]["Hell Rift v1.0"]["path"], "Hell Rift v1.0");
+    assert_eq!(content["mods"]["Winter Rift v1.0"]["name"], "Winter Rift v1.0");
+    assert_eq!(content["mods"]["Winter Rift v1.0"]["path"], "Winter Rift v1.0");
+
+    // Idempotency: calling again without changes should return false
+    let changed_second = crate::rose::rebuild_rose_category_manifest(&maps_dir).unwrap();
+    assert!(!changed_second, "Unchanged manifest should return false");
+
+    // Remove Hell Rift, then re-sync
+    fs_err::remove_dir_all(&hell_rift).unwrap();
+    let changed_third = crate::rose::rebuild_rose_category_manifest(&maps_dir).unwrap();
+    assert!(changed_third, "Manifest should update after mod removal");
+
+    let updated_content: serde_json::Value = serde_json::from_str(&fs_err::read_to_string(&manifest_file).unwrap()).unwrap();
+    assert!(updated_content["mods"].get("Hell Rift v1.0").is_none());
+    assert!(updated_content["mods"].get("Winter Rift v1.0").is_some());
+}
+
+#[test]
+fn test_migrate_outdated_rose_category_directory() {
+    let temp = TempDir::new().unwrap();
+    let maps_dir = temp.path().join("Rose").join("mods").join("maps");
+    fs_err::create_dir_all(&maps_dir).unwrap();
+
+    // Place a raw archive in maps
+    let raw_archive = maps_dir.join("Shurima_Rift-main.fantome");
+    make_packed_bin_fantome_zip(
+        &raw_archive,
+        "Shurima Rift",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+    assert!(raw_archive.is_file());
+
+    // Run category migration
+    let report = crate::migrate::migrate_outdated_rose_category_directory(&maps_dir).unwrap();
+    assert_eq!(report.extracted_archives, 1);
+    assert_eq!(report.manifests_rebuilt, 1);
+    assert_eq!(report.failed_count(), 0);
+
+    // The archive should be unlinked upon verified extraction
+    assert!(!raw_archive.exists(), "Original archive should be removed");
+
+    // The extracted mod folder should exist
+    let extracted_dir = maps_dir.join("Shurima_Rift-main");
+    assert!(extracted_dir.is_dir());
+    assert!(extracted_dir.join("META").join("info.json").is_file());
+
+    // The manifest should be generated with the extracted mod
+    let manifest_file = maps_dir.join("rose_category_mods.json");
+    assert!(manifest_file.is_file());
+    let content: serde_json::Value = serde_json::from_str(&fs_err::read_to_string(&manifest_file).unwrap()).unwrap();
+    assert_eq!(content["version"], 1);
+    assert_eq!(content["category"], "maps");
+    assert!(content["mods"].get("Shurima_Rift-main").is_some());
+}
+
+#[test]
+fn test_simultaneous_skins_and_category_sync() {
+    let temp = TempDir::new().unwrap();
+    let rose_mods = temp.path().join("Rose").join("mods");
+    fs_err::create_dir_all(&rose_mods).unwrap();
+
+    // 1. Skin target folder
+    let skins_dir = rose_mods.join("skins");
+    let target_24000 = skins_dir.join("24000");
+    fs_err::create_dir_all(&target_24000).unwrap();
+    let skin_archive = target_24000.join("Spirit_Blossom_Kav.fantome");
+    make_packed_bin_fantome_zip(
+        &skin_archive,
+        "Spirit Blossom Kav",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+
+    // 2. Maps category folder
+    let maps_dir = rose_mods.join("maps");
+    fs_err::create_dir_all(&maps_dir).unwrap();
+    let map_archive = maps_dir.join("Winter_Rift.fantome");
+    make_packed_bin_fantome_zip(
+        &map_archive,
+        "Winter Rift",
+        &healthy_bin(),
+        zip::CompressionMethod::Stored,
+    );
+
+    // Discovery of both
+    let skin_roots = crate::migrate::find_rose_skins_directories(&rose_mods);
+    assert_eq!(skin_roots.len(), 1);
+    assert_eq!(skin_roots[0], skins_dir);
+
+    let cat_roots = crate::rose::find_rose_category_directories(&rose_mods);
+    assert_eq!(cat_roots.len(), 1);
+    assert_eq!(cat_roots[0], maps_dir);
+
+    // Effective scan dir should retain rose_mods so both are scanned and migrated
+    let effective = crate::migrate::resolve_effective_scan_dir(rose_mods.clone());
+    assert_eq!(effective, rose_mods, "Must retain Rose/mods when categories exist");
+
+    // Run migration on both
+    let skin_report = crate::migrate::migrate_outdated_rose_directory(&skins_dir).unwrap();
+    assert_eq!(skin_report.extracted_archives, 1);
+    assert_eq!(skin_report.manifests_rebuilt, 1);
+    assert!(target_24000.join("rose_mod_targets.json").is_file());
+
+    let cat_report = crate::migrate::migrate_outdated_rose_category_directory(&maps_dir).unwrap();
+    assert_eq!(cat_report.extracted_archives, 1);
+    assert_eq!(cat_report.manifests_rebuilt, 1);
+    assert!(maps_dir.join("rose_category_mods.json").is_file());
+
+    // Verify archives were safely removed and folders extracted
+    assert!(!skin_archive.exists());
+    assert!(!map_archive.exists());
+    assert!(target_24000.join("Spirit_Blossom_Kav").is_dir());
+    assert!(maps_dir.join("Winter_Rift").is_dir());
+}
+
+
 
 
 
