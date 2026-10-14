@@ -1,3 +1,15 @@
+## What's New in v0.2.6
+
+* **Rose Category Mods Support & Simultaneous Synchronization**:
+  - Full discovery, migration, and reconciliation for non-skin Rose categories (`maps`, `loading_screen`, `announcers`, `fonts`, `others`, `sfx`, `ui`, `vfx`, `voiceover`, `hud`, `audio`, and custom category folders).
+  - Automatically migrates and extracts unextracted `.fantome`, `.zip`, and `.modpkg` archives placed directly inside category folders into the modern Rose layout (`<Mod Name>/META/info.json` + `WAD/...`).
+  - Simultaneously synchronizes both `rose_category_mods.json` and `rose_mod_targets.json` concurrently in a single run when scanning from `%LOCALAPPDATA%\Rose\mods`.
+  - Atomic, idempotent manifest writes prevent file corruption if interrupted.
+  - Automatically updates `rose_category_mods.json` when category mods are beautified, deleted, or quarantined to `.broken/`.
+
+* **Production Optimized Release Profile**:
+  - Maximum compilation optimization (`opt-level = 3`, `lto = "thin"`, `codegen-units = 1`, `panic = "abort"`, and binary symbol stripping) yielding minimal binary size and instantaneous CLI startup.
+
 ## What's New in v0.2.5
 
 * **Native `.modpkg` Title Beautification & In-Place Renaming**:
