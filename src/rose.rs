@@ -297,14 +297,10 @@ pub fn update_rose_manifest_if_present(mod_dir: &Path) -> FixerResult<bool> {
     Ok(true)
 }
 
-/// Check if a directory is a Rose category directory (e.g. `Rose/mods/maps`, `Rose/mods/others`).
+/// Check if a directory is an active Rose category directory (e.g. `Rose/mods/maps`, `Rose/mods/others`).
 pub fn is_rose_category_dir(dir: &Path) -> bool {
     if !dir.is_dir() {
         return false;
-    }
-
-    if dir.join(ROSE_CATEGORY_MODS).is_file() {
-        return true;
     }
 
     let dir_name = match dir.file_name().and_then(|n| n.to_str()) {
@@ -316,31 +312,51 @@ pub fn is_rose_category_dir(dir: &Path) -> bool {
         return false;
     }
 
-    let path_str = dir.to_string_lossy().to_ascii_lowercase();
-    let is_in_rose_mods = path_str.contains("rose\\mods") || path_str.contains("rose/mods");
-
-    if is_in_rose_mods && KNOWN_ROSE_CATEGORIES.iter().any(|&c| c == dir_name) {
+    // If an existing manifest is present, process it
+    if dir.join(ROSE_CATEGORY_MODS).is_file() {
         return true;
     }
 
-    // If dir is under a directory named "mods" and contains extracted mod folders
-    if let Some(parent) = dir.parent() {
-        let parent_name = parent
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        if parent_name == "mods" {
-            if let Ok(entries) = fs_err::read_dir(dir) {
-                for entry in entries.filter_map(|e| e.ok()) {
-                    let p = entry.path();
-                    if p.is_dir()
-                        && (crate::migrate::validate_mod_folder(&p)
-                            || crate::migrate::looks_like_mod_folder(&p))
-                    {
-                        return true;
-                    }
-                }
+    let path_str = dir.to_string_lossy().to_ascii_lowercase();
+    let is_in_rose_mods = path_str.contains("rose\\mods") || path_str.contains("rose/mods");
+
+    // Check if dir actually contains non-empty subdirectories or candidate archives
+    let mut has_mods = false;
+    if let Ok(entries) = fs_err::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.')
+                || name.eq_ignore_ascii_case("hematite-fixed")
+                || name.eq_ignore_ascii_case("backup")
+                || name.eq_ignore_ascii_case(".broken")
+            {
+                continue;
+            }
+            if entry.path().is_dir() && !crate::cleanup::is_dir_empty(&entry.path()) {
+                has_mods = true;
+                break;
+            }
+            let lower = name.to_ascii_lowercase();
+            if lower.ends_with(".fantome") || lower.ends_with(".zip") || lower.ends_with(".modpkg") {
+                has_mods = true;
+                break;
+            }
+        }
+    }
+
+    if has_mods {
+        if is_in_rose_mods && KNOWN_ROSE_CATEGORIES.iter().any(|&c| c == dir_name) {
+            return true;
+        }
+
+        if let Some(parent) = dir.parent() {
+            let parent_name = parent
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if parent_name == "mods" {
+                return true;
             }
         }
     }
@@ -406,17 +422,31 @@ pub fn rebuild_rose_category_manifest(category_dir: &Path) -> FixerResult<bool> 
             let p = entry.path();
             if p.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') || name.eq_ignore_ascii_case("hematite-fixed") {
+                if name.starts_with('.')
+                    || name.eq_ignore_ascii_case("hematite-fixed")
+                    || name.eq_ignore_ascii_case("backup")
+                    || name.eq_ignore_ascii_case(".broken")
+                {
                     continue;
                 }
-                if crate::migrate::validate_mod_folder(&p) || crate::migrate::looks_like_mod_folder(&p) {
-                    mod_folders.push(name);
+                if crate::cleanup::is_dir_empty(&p) {
+                    continue;
                 }
+                mod_folders.push(name);
             }
         }
     }
 
     mod_folders.sort();
+
+    // If there are NO mod folders in this category directory:
+    if mod_folders.is_empty() {
+        if manifest_path.is_file() {
+            let _ = fs_err::remove_file(&manifest_path);
+            return Ok(true);
+        }
+        return Ok(false);
+    }
 
     // Read existing manifest if present
     let existing_raw = if manifest_path.is_file() {

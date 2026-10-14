@@ -2212,10 +2212,11 @@ fn test_rose_category_detection_and_discovery() {
     fs_err::create_dir_all(&rose_mods).unwrap();
 
     let maps_dir = rose_mods.join("maps");
-    fs_err::create_dir_all(&maps_dir).unwrap();
+    fs_err::create_dir_all(maps_dir.join("Winter Rift v1.0")).unwrap();
+    fs_err::write(maps_dir.join("Winter Rift v1.0").join("dummy.txt"), b"mod").unwrap();
 
     let loading_dir = rose_mods.join("loading_screen");
-    fs_err::create_dir_all(&loading_dir).unwrap();
+    fs_err::create_dir_all(&loading_dir).unwrap(); // Completely empty category folder!
 
     let skins_dir = rose_mods.join("skins");
     fs_err::create_dir_all(&skins_dir).unwrap();
@@ -2223,9 +2224,9 @@ fn test_rose_category_detection_and_discovery() {
     let numeric_target = skins_dir.join("24000");
     fs_err::create_dir_all(&numeric_target).unwrap();
 
-    // 1. Detection
+    // 1. Detection: non-empty category is detected; completely empty category is ignored!
     assert!(crate::rose::is_rose_category_dir(&maps_dir));
-    assert!(crate::rose::is_rose_category_dir(&loading_dir));
+    assert!(!crate::rose::is_rose_category_dir(&loading_dir), "Empty category folder must be ignored");
     assert!(!crate::rose::is_rose_category_dir(&skins_dir));
     assert!(!crate::rose::is_rose_category_dir(&numeric_target));
 
@@ -2235,12 +2236,12 @@ fn test_rose_category_detection_and_discovery() {
     fs_err::write(custom_cat.join("rose_category_mods.json"), b"{}").unwrap();
     assert!(crate::rose::is_rose_category_dir(&custom_cat));
 
-    // 2. Discovery
+    // 2. Discovery: discovers active categories with mods or manifests, ignores empty ones
     let discovered = crate::rose::find_rose_category_directories(&rose_mods);
-    assert_eq!(discovered.len(), 3);
+    assert_eq!(discovered.len(), 2);
     assert!(discovered.contains(&maps_dir));
-    assert!(discovered.contains(&loading_dir));
     assert!(discovered.contains(&custom_cat));
+    assert!(!discovered.contains(&loading_dir));
 }
 
 #[test]
@@ -2249,10 +2250,20 @@ fn test_rose_category_manifest_rebuild_and_sync() {
     let maps_dir = temp.path().join("maps");
     fs_err::create_dir_all(&maps_dir).unwrap();
 
-    // Create two extracted mod folders in maps
+    // Empty category: should never create a manifest
+    let empty_changed = crate::rose::rebuild_rose_category_manifest(&maps_dir).unwrap();
+    assert!(!empty_changed);
+    assert!(!maps_dir.join("rose_category_mods.json").exists(), "Empty category must not have manifest");
+
+    // If an orphan or stray manifest existed in an empty category, it cleans it up
+    fs_err::write(maps_dir.join("rose_category_mods.json"), b"{}").unwrap();
+    assert!(maps_dir.join("rose_category_mods.json").is_file());
+    let cleanup_changed = crate::rose::rebuild_rose_category_manifest(&maps_dir).unwrap();
+    assert!(cleanup_changed, "Should remove stray manifest from empty category");
+    assert!(!maps_dir.join("rose_category_mods.json").exists(), "Stray manifest must be removed");
+
+    // Create two mod folders in maps
     let winter_rift = maps_dir.join("Winter Rift v1.0");
-    fs_err::create_dir_all(winter_rift.join("META")).unwrap();
-    fs_err::write(winter_rift.join("META").join("info.json"), r#"{"Name":"Winter Rift v1.0"}"#).unwrap();
     fs_err::create_dir_all(winter_rift.join("WAD")).unwrap();
     fs_err::write(winter_rift.join("WAD").join("Map11.wad.client"), b"wad").unwrap();
 

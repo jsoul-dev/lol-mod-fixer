@@ -217,25 +217,21 @@ pub fn execute_repair(
     // 0. Check for and migrate outdated Rose structure (.fantome/.zip archives in numeric skin folders or category folders)
     if migrate && !dry_run && (!rose_roots.is_empty() || !category_roots.is_empty()) {
         printer.print_stage_status("Checking Rose mod structure and manifests...");
+        let mut combined_report = crate::migrate::MigrationReport::default();
         for rose_dir in &rose_roots {
             match crate::migrate::migrate_outdated_rose_directory(rose_dir) {
-                Ok(report) => {
-                    if !report.is_empty() {
-                        printer.print_migration_summary(&report);
-                    }
-                }
+                Ok(report) => combined_report.combine(&report),
                 Err(e) => tracing::warn!("Rose legacy migration notice for {}: {e}", rose_dir.display()),
             }
         }
         for cat_dir in &category_roots {
             match crate::migrate::migrate_outdated_rose_category_directory(cat_dir) {
-                Ok(report) => {
-                    if !report.is_empty() {
-                        printer.print_migration_summary(&report);
-                    }
-                }
+                Ok(report) => combined_report.combine(&report),
                 Err(e) => tracing::warn!("Rose category migration notice for {}: {e}", cat_dir.display()),
             }
+        }
+        if !combined_report.is_empty() {
+            printer.print_migration_summary(&combined_report);
         }
     }
 
